@@ -10,6 +10,8 @@
 #include "openMVG/cameras/Camera_Pinhole.hpp"
 #include "openMVG/cameras/Camera_Pinhole_Radial.hpp"
 #include "openMVG/cameras/Camera_Intrinsics.hpp"
+// Brown Camera model export.
+#include "openMVG/cameras/Camera_Pinhole_Brown.hpp"
 #include "openMVG/cameras/Camera_undistort_image.hpp"
 #include "openMVG/features/feature.hpp"
 #include "openMVG/image/image_io.hpp"
@@ -100,8 +102,31 @@ bool CreateLineCameraFile(  const IndexT camera_id,
       }
       break; 
     case PINHOLE_CAMERA_BROWN: 
-      std::cout << "PINHOLE_CAMERA_BROWN is not supported. Aborting ..." << std::endl;
-      return false;
+      //OpenMVG's PINHOLE_CAMERA_BROWN corresponds to Colmap's FULL_OPENCV
+      //Parameters: fx, fy, cx, cy, k1, k2, p1, p2, k3, k4, k5, k6
+      {
+        std::shared_ptr<openMVG::cameras::Pinhole_Intrinsic_Brown_T2> pinhole_intrinsic_brown(
+            dynamic_cast<openMVG::cameras::Pinhole_Intrinsic_Brown_T2 * >(intrinsic->clone()));
+        
+        came_line_ss << camera_id << " " << 
+          "FULL_OPENCV" << " " <<
+          pinhole_intrinsic_brown->w() << " " << 
+          pinhole_intrinsic_brown->h() << " " <<
+          pinhole_intrinsic_brown->focal() << " " << 
+          pinhole_intrinsic_brown->focal() << " " << 
+          pinhole_intrinsic_brown->principal_point().x() << " " << 
+          pinhole_intrinsic_brown->principal_point().y() << " " << 
+          pinhole_intrinsic_brown->getParams().at(3) << " " << //k1
+          pinhole_intrinsic_brown->getParams().at(4) << " " << //k2
+          pinhole_intrinsic_brown->getParams().at(6) << " " << //t1
+          pinhole_intrinsic_brown->getParams().at(7) << " " << //t2
+          pinhole_intrinsic_brown->getParams().at(5) << " " << //k3
+          0.0 << " " << // k4
+          0.0 << " " << // k5
+          0.0 << "\n";  // k6
+      }
+      //std::cout << "PINHOLE_CAMERA_BROWN is not supported. Aborting ..." << std::endl;
+      //return false;
       break;      
     case PINHOLE_CAMERA_FISHEYE: 
       std::cout << "PINHOLE_CAMERA_FISHEYE is not supported. Aborting ..." << std::endl;
