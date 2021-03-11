@@ -2,7 +2,7 @@
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(CMAKE_AUTOMOC ON)
 # The name of my project.
-SET(ProjectName ui_openMVG_custom_gcp_registration)
+SET(ProjectName openMVG_main_custom_gcp_registration)
 PROJECT(${ProjectName})
 # All Source Files here
 SET(SourceFiles
@@ -25,5 +25,5 @@ ${HeaderFiles})
 TARGET_LINK_LIBRARIES(${ProjectName}
 openMVG_sfm
 ${STLPLUS_LIBRARY})
-SET_PROPERTY(TARGET ${ProjectName} PROPERTY FOLDER OpenMVG/software/ui)
+SET_PROPERTY(TARGET ${ProjectName} PROPERTY FOLDER OpenMVG/software)
 INSTALL(TARGETS ${ProjectName} DESTINATION bin/)
