@@ -11,6 +11,7 @@ GCP.cpp
 GCPList.cpp)
 # All non moc header files here
 SET(HeaderFiles
+document.hpp
 GCP_register.hpp
 GCP.hpp
 GCPList.hpp)

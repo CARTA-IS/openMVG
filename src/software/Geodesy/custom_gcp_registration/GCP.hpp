@@ -9,18 +9,27 @@ private:
     double easting;
     double northing;
     double altitude;
-    float pixelX;
     float pixelY;
     std::string image;
 
 public:
+    std::vector<Marker> markers;
     GCP(double x, double y, double z, float px, float py, std::string imageName);
     ~GCP();
-    double GetEasting();
-    double GetNorthing();
-    double GetAltitude();
-    float GetPixelX();
-    float GetPixelY();
-    std::string GetImageName();
-}
+    bool operator==(GCP &ref){
+        return (easting == ref.GetEasting() && northing == ref.GetNorthing() && altitude == ref.GetAltitude())};
+    GCP operator+(GCP &ref)
+    {
+        markers.insert(markers.end(), ref.markers.begin(), ref.markers.end());
+        return *this;
+    }
+    Vec3 GetX();
+    int GetObsSize();
+};
+
+struct Marker
+{
+    Vec2 pixels;
+    std::string imageName;
+};
 #endif

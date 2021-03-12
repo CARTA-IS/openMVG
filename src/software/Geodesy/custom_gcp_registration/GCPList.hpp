@@ -7,15 +7,13 @@
 class GCPList
 {
 private:
-    std::string prj;
+    std::vector<GCP> gcplist;
 
 public:
     GCPList();
     ~GCPList();
-    void GCPPush(GCP newGcp);
-    void SetProjection(std::string prjStr);
-    std::string GetProjection();
+    void GCPPush(GCP newGcp); // push and merge same GCP in to one GCP.
     int GetSize();
     GCP GCPPop(); // Get last GCP correspondence.
-}
+};
 #endif
