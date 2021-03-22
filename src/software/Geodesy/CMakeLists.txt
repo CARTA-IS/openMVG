@@ -1,4 +1,4 @@
-
+add_subdirectory(custom_gcp_registration)
 add_executable(openMVG_main_geodesy_registration_to_gps_position registration_to_exif_gps_position.cpp)
 target_link_libraries(openMVG_main_geodesy_registration_to_gps_position
   PRIVATE

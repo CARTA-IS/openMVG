@@ -1,6 +1,7 @@
 #ifndef GCPREGISTER_HPP
 #define GCPREGISTER_HPP
 
+#include <vector>
 #include <string>
 #include <fstream>
 #include <iostream>
@@ -14,15 +15,15 @@ private:
     Document m_doc;
     std::string sfmFileName;
     GCPList gcpList;
-    void saveProject();
-    void openProject(std::string projectPath);
-    void loadGCPFile(std::string gcpFile);
-    void registerProject();
     void SetProjection(std::string prjStr);
     std::string GetProjection();
 
 public:
     GCPRegister();
     ~GCPRegister();
-}
+    void saveProject(std::string savePath);
+    void openProject(std::string projectPath);
+    void loadGCPFile(std::string gcpFile);
+    void registerProject();
+};
 #endif

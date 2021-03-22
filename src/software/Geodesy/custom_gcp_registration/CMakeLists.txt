@@ -6,13 +6,14 @@ SET(ProjectName openMVG_main_custom_gcp_registration)
 PROJECT(${ProjectName})
 # All Source Files here
 SET(SourceFiles
-GCP_register.cpp
+main.cpp
+GCPRegister.cpp
 GCP.cpp
 GCPList.cpp)
 # All non moc header files here
 SET(HeaderFiles
 document.hpp
-GCP_register.hpp
+GCPRegister.hpp
 GCP.hpp
 GCPList.hpp)
 # ==============================================================================
@@ -23,8 +24,8 @@ ADD_EXECUTABLE(${ProjectName}
 ${SourceFiles}
 ${HeaderFiles})
 # Linking with openMVG Libraries.
-TARGET_LINK_LIBRARIES(${ProjectName}
-openMVG_sfm
+TARGET_LINK_LIBRARIES(${ProjectName} 
+openMVG_sfm 
 ${STLPLUS_LIBRARY})
 SET_PROPERTY(TARGET ${ProjectName} PROPERTY FOLDER OpenMVG/software)
 INSTALL(TARGETS ${ProjectName} DESTINATION bin/)

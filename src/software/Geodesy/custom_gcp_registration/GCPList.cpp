@@ -12,7 +12,7 @@ void GCPList::GCPPush(GCP newGcp) // push and merge same GCP in to one GCP.
             return;
         }
     }
-    gcplist.push_back(newGCP);
+    gcplist.push_back(newGcp);
 }
 int GCPList::GetSize()
 {
@@ -20,5 +20,7 @@ int GCPList::GetSize()
 }
 GCP GCPList::GCPPop() // Get last GCP correspondence.
 {
-    return gcplist.pop_up();
+    GCP tmp = gcplist.back();
+    gcplist.pop_back();
+    return tmp;
 }

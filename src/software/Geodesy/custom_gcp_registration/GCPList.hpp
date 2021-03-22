@@ -1,7 +1,6 @@
 #ifndef GCPLIST_HPP
 #define GCPLIST_HPP
 
-#include <string>
 #include "GCP.hpp"
 
 class GCPList
