@@ -76,18 +76,19 @@ void GCPRegister::loadGCPFile(std::string gcpFile)
         while (gcpList.GetSize() != 0)
         {
             GCP tmpGCP = gcpList.GCPPop();
-            Landmark tmpLandmark;
-            tmpLandmark.X = tmpGCP.GetX();
+            Landmark *tmpLandmark = new Landmark();
+            tmpLandmark->X = tmpGCP.GetX();
+            //std::cout << &tmpLandmark->X(0) << " " << &tmpLandmark->X(1) << " " << &tmpLandmark->X(2) << std::endl;
 
             for (int i = 0; i < tmpGCP.markers.size(); i++) //the number of makers in a GCP.
             {
                 Vec2 pt = tmpGCP.markers.at(i).pixels;
-                std::cout << "Observation : " << pt << std::endl;
+                //std::cout << "Observation : " << pt << std::endl;
                 std::string imageName = tmpGCP.markers.at(i).imageName;
                 int viewKey = -1;
                 for (auto it = m_doc._sfm_data.GetViews().begin(); it != m_doc._sfm_data.GetViews().end(); ++it)
                 {
-                    std::cout << it->first << " " << it->second->s_Img_path << std::endl;
+                    //std::cout << it->first << " " << it->second->s_Img_path << std::endl;
                     if (imageName.compare(it->second->s_Img_path) == 0)
                     {
                         viewKey = it->first;
@@ -100,9 +101,9 @@ void GCPRegister::loadGCPFile(std::string gcpFile)
                     //not calibrated image case.
                     continue;
                 }
-                tmpLandmark.obs.insert({viewKey, Observation(pt, 0)});
+                tmpLandmark->obs.insert({viewKey, Observation(pt, 0)});
             }
-            control_points_cpy.insert({control_points_cpy.size() + 1, tmpLandmark});
+            control_points_cpy.insert({control_points_cpy.size() + 1, *tmpLandmark});
         }
         m_doc._sfm_data.control_points = control_points_cpy;
     }

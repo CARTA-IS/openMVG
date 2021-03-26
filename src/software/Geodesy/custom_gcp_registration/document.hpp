@@ -27,7 +27,7 @@ struct Document
     {
         return openMVG::sfm::Save(_sfm_data,
                                   sFileName,
-                                  openMVG::sfm::ESfM_Data(openMVG::sfm::EXTRINSICS));
+                                  openMVG::sfm::ESfM_Data(openMVG::sfm::ALL));
     }
 };
 

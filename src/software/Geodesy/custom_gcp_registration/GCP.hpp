@@ -6,7 +6,7 @@ using namespace openMVG;
 
 struct Marker
 {
-    Vec2 pixels;
+    alignas(32) Vec2 pixels;
     std::string imageName;
 };
 

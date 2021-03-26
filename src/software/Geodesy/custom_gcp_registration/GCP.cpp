@@ -15,7 +15,10 @@ GCP::~GCP()
 }
 Vec3 GCP::GetX(void)
 {
-    return Vec3(easting, northing, altitude);
+    alignas(32) Vec3 tmp;
+    tmp << easting, northing, altitude;
+    return tmp;
+    //return Vec3(easting, northing, altitude);
 }
 int GCP::GetObsSize()
 {
