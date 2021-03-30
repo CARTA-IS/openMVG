@@ -7,5 +7,5 @@ int main(int argc, char **argv)
     gcpRegister->loadGCPFile(std::string(argv[1]));
     //gcpRegister->saveProject(path + "test.json");
     gcpRegister->registerProject();
-    gcpRegister->saveProject(std::string(argv[2]) + ".cp");
+    gcpRegister->saveProject(std::string(argv[3]));
 }
