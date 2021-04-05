@@ -24,6 +24,6 @@ public:
     void saveProject(std::string savePath);
     void openProject(std::string projectPath);
     void loadGCPFile(std::string gcpFile);
-    void registerProject();
+    void registerProject(double weight = 20.0);
 };
 #endif

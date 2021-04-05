@@ -113,8 +113,9 @@ void GCPRegister::loadGCPFile(std::string gcpFile)
         return;
     }
 }
-void GCPRegister::registerProject(double weight = 20.0)
+void GCPRegister::registerProject(double weight)
 {
+    std::cout << "Bundle weight : " << weight << std::endl;
     if (m_doc._sfm_data.control_points.size() < 3)
     {
         std::cout << "At least 3 control points are required." << std::endl;
