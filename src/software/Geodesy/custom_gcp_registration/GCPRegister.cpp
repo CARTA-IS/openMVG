@@ -113,7 +113,7 @@ void GCPRegister::loadGCPFile(std::string gcpFile)
         return;
     }
 }
-void GCPRegister::registerProject()
+void GCPRegister::registerProject(double weight = 20.0)
 {
     if (m_doc._sfm_data.control_points.size() < 3)
     {
@@ -280,10 +280,11 @@ void GCPRegister::registerProject()
     //---
     {
         std::cout << "debug begin" << std::endl;
+        bool useBundle = (weight > 0);
         using namespace openMVG::sfm;
         Bundle_Adjustment_Ceres::BA_Ceres_options options;
         Bundle_Adjustment_Ceres bundle_adjustment_obj(options);
-        Control_Point_Parameter control_point_opt(20.0, true);
+        Control_Point_Parameter control_point_opt(weight, useBundle);
         if (!bundle_adjustment_obj.Adjust(m_doc._sfm_data,
                                           Optimize_Options(
                                               cameras::Intrinsic_Parameter_Type::NONE, // Keep intrinsic constant
