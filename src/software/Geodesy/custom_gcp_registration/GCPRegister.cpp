@@ -494,6 +494,21 @@ void GCPRegister::registerProject(double weight)
                 << "Control points coords:\n"
                 << x2 << std::endl
                 << std::endl;
+            //---
+            //Compute RMS error.
+            std::cout << "error (m)\n"
+                      << (x2 - x3) << std::endl;
+            //std::cout << "pow 2 \n"
+            //          << (x2 - x3).array().pow(2.0) << std::endl;
+            MatrixXd meanMat = MatrixXd::Ones(map_control_points.size(), 1);
+            meanMat /= map_control_points.size();
+            //std::cout << "mean Mat \n"
+            //          << meanMat << std::endl;
+            Mat RMS = ((x2 - x3).array().pow(2.0).matrix() * meanMat).array().sqrt().matrix();
+            std::cout << "RMS Error (m)\n"
+                      << "X : " << RMS.row(0) << "\n"
+                      << "Y : " << RMS.row(1) << "\n"
+                      << "Z : " << RMS.row(2) << std::endl;
         }
         else
         {
