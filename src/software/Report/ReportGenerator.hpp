@@ -25,11 +25,16 @@ private:
     Document m_doc;
     std::string loggingFileName;
     std::string sfmFileName;
+    std::vector<Vec2> vec_residuals;
 
 public:
     ReportGenerator();
     ~ReportGenerator();
     void openProject(std::string projectPath);
     void reportProject();
+    bool minMaxMeanMedianRMSE(std::vector<Vec2>::const_iterator begin, std::vector<Vec2>::const_iterator end,
+                              double &min, double &max, double &mean, double &median, double &rmse);
+    void generateHistogram(std::string outputPath);
+    double ComputeResidualsHistogram(Histogram<double> *histo)
 };
 #endif
