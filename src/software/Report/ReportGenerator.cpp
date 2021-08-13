@@ -13,7 +13,8 @@ void ReportGenerator::generateHistogram(std::string outputPath)
 {
     // Save outlier residual information
     Histogram<double> histoResiduals;
-    ComputeResidualsHistogram(&histoResiduals);
+    std::ostringstream os;
+    ComputeResidualsHistogram(&histoResiduals, os);
 
     std::cout << "\nHistogram of residuals:\n"
               << histoResiduals.ToString() << std::endl;
@@ -29,7 +30,7 @@ void ReportGenerator::generateHistogram(std::string outputPath)
         html_doc_stream_->pushInfo("Dataset info:");
         html_doc_stream_->pushInfo("Views count: " +
                                    htmlDocument::toString(m_doc._sfm_data.GetViews().size()) + "<br>");
-        std::ostringstream os;
+
         os << "Structure from Motion process finished.";
         html_doc_stream_->pushInfo("<hr>");
         html_doc_stream_->pushInfo(htmlMarkup("h1", os.str()));
@@ -51,7 +52,7 @@ void ReportGenerator::generateHistogram(std::string outputPath)
         const auto range = autoJSXGraphViewport<double>(xBin, histoResiduals.GetHist());
 
         htmlDocument::JSXGraphWrapper jsxGraph;
-        jsxGraph.init("3DtoImageResiduals", 600, 300);
+        jsxGraph.init("3DtoImageResiduals", 1200, 600);
         jsxGraph.addXYChart(xBin, histoResiduals.GetHist(), "line,point");
         jsxGraph.UnsuspendUpdate();
         jsxGraph.setViewport(range);
@@ -96,7 +97,7 @@ bool ReportGenerator::minMaxMeanMedianRMSE(std::vector<Vec2>::const_iterator beg
     return true;
 }
 // Actual residual calculation.
-double ReportGenerator::ComputeResidualsHistogram(Histogram<double> *histo)
+void ReportGenerator::ComputeResidualsHistogram(Histogram<double> *histo, std::ostringstream &os)
 {
     // Collect residuals for each observation
     vec_residuals.reserve(m_doc._sfm_data.structure.size());
@@ -125,19 +126,28 @@ double ReportGenerator::ComputeResidualsHistogram(Histogram<double> *histo)
             histo->Add(vec_val.cbegin(), vec_val.cend());
         }
 
-        std::cout << std::endl
-                  << std::endl;
-        std::cout << std::endl
-                  << "ComputeResidualsHistogram."
-                  << "\n"
-                  << "\t-- #Tracks:\t" << m_doc._sfm_data.GetLandmarks().size() << std::endl
-                  << "\t-- Residual min:\t" << dMin << std::endl
-                  << "\t-- Residual median:\t" << dMedian << std::endl
-                  << "\t-- Residual max:\t " << dMax << std::endl
-                  << "\t-- Residual mean:\t " << dMean << std::endl
-                  << "\t-- Residual rmse:\t " << dRMSE << std::endl;
-
-        return dMean;
+        std::cout << std::endl;
+        //std::cout
+        os << "\n"
+           << "ComputeResidualsHistogram."
+           << "\n"
+           << "\t-- #Tracks:\t" << m_doc._sfm_data.GetLandmarks().size() << "\n"
+           << "\t-- Residual min:\t" << dMin << "\n"
+           << "\t-- Residual median:\t" << dMedian << "\n"
+           << "\t-- Residual max:\t " << dMax << "\n"
+           << "\t-- Residual mean:\t " << dMean << "\n"
+           << "\t-- Residual rmse:\t " << dRMSE << "\n";
+        std::cout << os.str();
+        std::istringstream iss(os.str());
+        std::string token;
+        //clear os
+        os.str("");
+        os.clear();
+        while (getline(iss, token))
+        {
+            os << token << "<br>";
+        }
+        return;
     }
-    return -1.0;
+    return;
 }

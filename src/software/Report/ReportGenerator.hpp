@@ -37,6 +37,6 @@ public:
     bool minMaxMeanMedianRMSE(std::vector<Vec2>::const_iterator begin, std::vector<Vec2>::const_iterator end,
                               double &min, double &max, double &mean, double &median, double &rmse, std::vector<double> &vec);
     void generateHistogram(std::string outputPath);
-    double ComputeResidualsHistogram(Histogram<double> *histo);
+    void ComputeResidualsHistogram(Histogram<double> *histo, std::ostringstream &os);
 };
 #endif
