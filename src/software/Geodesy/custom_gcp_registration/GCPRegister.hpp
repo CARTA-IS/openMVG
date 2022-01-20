@@ -14,6 +14,7 @@ private:
     std::string prj;
     Document m_doc;
     std::string sfmFileName;
+
     GCPList gcpList;
     void SetProjection(std::string prjStr);
     std::string GetProjection();
@@ -21,6 +22,7 @@ private:
 public:
     GCPRegister();
     ~GCPRegister();
+    std::string log;
     void saveProject(std::string savePath);
     void openProject(std::string projectPath);
     void loadGCPFile(std::string gcpFile);

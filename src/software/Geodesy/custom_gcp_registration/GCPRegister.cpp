@@ -476,7 +476,6 @@ void GCPRegister::registerProject(double weight)
                     << (sim(map_triangulated[CPIndex] * avg_dist + centroid) - map_control_points[CPIndex]).norm() << " user unit(s)"
                     << "\n\n";
             }
-            std::cout << os.str();
             id_col = 0;
             for (const auto &cp : map_control_points)
             {
@@ -485,7 +484,7 @@ void GCPRegister::registerProject(double weight)
             }
             std::cout << std::fixed;
             std::cout.precision(6);
-            std::cout
+            os
                 << "Control points observation triangulations:\n"
                 << x1 << std::endl
                 << "Control points observation triangulations after similarity:\n"
@@ -505,10 +504,12 @@ void GCPRegister::registerProject(double weight)
             //std::cout << "mean Mat \n"
             //          << meanMat << std::endl;
             Mat RMS = ((x2 - x3).array().pow(2.0).matrix() * meanMat).array().sqrt().matrix();
-            std::cout << "RMS Error (m)\n"
-                      << "X : " << RMS.row(0) << "\n"
-                      << "Y : " << RMS.row(1) << "\n"
-                      << "Z : " << RMS.row(2) << std::endl;
+            os << "RMS Error (m)\n"
+               << "X : " << RMS.row(0) << "\n"
+               << "Y : " << RMS.row(1) << "\n"
+               << "Z : " << RMS.row(2) << std::endl;
+            std::cout << os.str();
+            log = os.str();
         }
         else
         {

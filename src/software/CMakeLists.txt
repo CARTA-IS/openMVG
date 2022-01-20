@@ -1,6 +1,7 @@
 add_subdirectory(SfM)
 add_subdirectory(Localization)
 add_subdirectory(Geodesy)
+add_subdirectory(Report)
 #add_subdirectory(opencv)
 
 if (OpenMVG_BUILD_OPENGL_EXAMPLES)
