@@ -63,7 +63,13 @@ bool getInfo
 {
   bool existInDatabase = false;
 
-  const Datasheet refDatasheet( sModel, -1. );
+  // Split camera model string
+  int firstSpaceIndex = sModel.find(' ') + 1;
+  int semicolonIndex = sModel.find(';');
+  std::string sModelTrimmed = sModel.substr( firstSpaceIndex, semicolonIndex - firstSpaceIndex );
+  std::cout << sModel << " trimmed into " << sModelTrimmed << std::endl;
+
+  const Datasheet refDatasheet( sModelTrimmed, -1. );
   std::vector<Datasheet>::const_iterator datasheet = std::find( vec_database.begin(), vec_database.end(), refDatasheet );
   if ( datasheet != vec_database.end() )
   {
