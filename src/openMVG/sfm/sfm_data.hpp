@@ -30,6 +30,9 @@ using Poses = Hash_Map<IndexT, geometry::Pose3>;
 /// Define a collection of View (indexed by View::id_view)
 using Views = Hash_Map<IndexT, std::shared_ptr<View>>;
 
+/// Define a collection of Velocity (indexed by Velocity::id_velocity)
+using Velocities = Hash_Map<IndexT, geometry::TranslationVelocity>;
+
 /// Generic SfM data container
 /// Store structure and camera properties:
 struct SfM_Data
@@ -44,6 +47,8 @@ struct SfM_Data
   Landmarks structure;
   /// Controls points (stored as Landmarks (id_feat has no meaning here))
   Landmarks control_points;
+  /// Considered velocities
+  Velocities velocities;
 
   /// Root Views path
   std::string s_root_path;

@@ -65,7 +65,7 @@ void GCPRegister::loadGCPFile(std::string gcpFile)
                 {
                     gcpTokens.push_back(token);
                 }
-                GCP tmpGCP(std::stod(gcpTokens.at(0)), std::stod(gcpTokens.at(1)), std::stod(gcpTokens.at(2)), std::stod(gcpTokens.at(3)), std::stod(gcpTokens.at(4)), gcpTokens.at(5)); // X Y Z coordinates.
+                GCP tmpGCP(std::stod(gcpTokens.at(0)), std::stod(gcpTokens.at(1)), std::stod(gcpTokens.at(2)), std::stod(gcpTokens.at(3)), std::stod(gcpTokens.at(4)), gcpTokens.at(5)); // X Y Z px py imageName
                 gcpList.GCPPush(tmpGCP);
             }
         }
@@ -78,7 +78,7 @@ void GCPRegister::loadGCPFile(std::string gcpFile)
             Landmark *tmpLandmark = new Landmark();
             tmpLandmark->X = tmpGCP.GetX();
             //std::cout << &tmpLandmark->X(0) << " " << &tmpLandmark->X(1) << " " << &tmpLandmark->X(2) << std::endl;
-            for (int i = 0; i < tmpGCP.markers.size(); i++) //the number of makers in a GCP.
+            for (int i = 0; i < tmpGCP.markers.size(); i++) //the number of markers in a GCP
             {
                 Vec2 pt = tmpGCP.markers.at(i).pixels;
                 std::string imageName = tmpGCP.markers.at(i).imageName;
