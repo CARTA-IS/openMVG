@@ -13,6 +13,7 @@
 
 #include "openMVG/cameras/Camera_Intrinsics.hpp"
 #include "openMVG/geometry/pose3.hpp"
+#include "openMVG/geometry/velocity.hpp"
 #include "openMVG/sfm/sfm_landmark.hpp"
 #include "openMVG/sfm/sfm_view.hpp"
 #include "openMVG/sfm/sfm_view_priors.hpp"
@@ -61,6 +62,7 @@ struct SfM_Data
   const Intrinsics & GetIntrinsics() const {return intrinsics;}
   const Landmarks & GetLandmarks() const {return structure;}
   const Landmarks & GetControl_Points() const {return control_points;}
+  const Velocities & GetVelocities() const {return velocities;}
 
   /// Check if the View have defined intrinsic and pose
   bool IsPoseAndIntrinsicDefined(const View * view) const
