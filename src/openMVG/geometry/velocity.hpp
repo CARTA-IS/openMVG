@@ -18,9 +18,9 @@ namespace geometry
 class TranslationVelocity
 {
   protected:
-    /// Center of rotation
+    /// Vector of translation velocity
     Vec3 velocity_;
-
+  
   public:
     /**
     * @brief Constructor

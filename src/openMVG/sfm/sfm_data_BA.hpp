@@ -16,6 +16,16 @@ namespace sfm {
 
 struct SfM_Data;
 
+/// Enum to control which parameter(s) of the Camera velocity must be refined or not -> Needs update later
+enum class Velocity_Parameter_Type : int
+{
+  // Note: Use power of two values in order to use bitwise operators.
+  NONE                = 1,     // Velocity parameters will be considered as FIXED
+  ADJUST_ROTATION     = 2,
+  ADJUST_TRANSLATION  = 4,
+  ADJUST_ALL = ADJUST_ROTATION | ADJUST_TRANSLATION
+};
+
 /// Enum to control which parameter(s) of the Camera motion must be refined or not
 enum class Extrinsic_Parameter_Type : int
 {

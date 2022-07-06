@@ -414,11 +414,12 @@ struct ResidualErrorFunctor_Pinhole_Intrinsic_Radial_K3
 /**
  * @brief Ceres functor with constrained 3D points to use a Pinhole_Intrinsic_Brown_T2
  *
- *  Data parameter blocks are the following <2,8,6,3>
+ *  Data parameter blocks are the following <2,8,6,3,3>
  *  - 2 => dimension of the residuals,
  *  - 8 => the intrinsic data block [focal, principal point x, principal point y, K1, K2, K3, T1, T2],
  *  - 6 => the camera extrinsic data block (camera orientation and position) [R;t],
  *         - rotation(angle axis), and translation [rX,rY,rZ,tx,ty,tz].
+ *  - 3 => the camera velocity data block [vx, vy, vz]
  *  - 3 => a 3D point data block.
  *
  */
@@ -445,6 +446,7 @@ struct ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2
    * @param[in] cam_intrinsics: Camera intrinsics( focal, principal point [x,y], k1, k2, k3, t1, t2 )
    * @param[in] cam_extrinsics: Camera parameterized using one block of 6 parameters [R;t]:
    *   - 3 for rotation(angle axis), 3 for translation
+   * @param[in] cam_velocities: Camera translation velocities( vx, vy, vz )
    * @param[in] pos_3dpoint
    * @param[out] out_residuals
    */
@@ -452,9 +454,17 @@ struct ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2
   bool operator()(
     const T* const cam_intrinsics,
     const T* const cam_extrinsics,
+    const T* const cam_velocities,
     const T* const pos_3dpoint,
     T* out_residuals) const
   {
+    // Time delay between lines
+    const T t = 0.03;
+    
+    // Apply velocity parameters
+    Eigen::Map<const Eigen::Matrix<T, 3, 1>> cam_V((&cam_velocities[0]));
+    Eigen::Matrix<T, 3, 1> cam_delta_t = m_pos_2dpoint[1] * t * cam_V;
+   
     //--
     // Apply external parameters (Pose)
     //--
@@ -463,11 +473,12 @@ struct ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2
     Eigen::Map<const Eigen::Matrix<T, 3, 1>> cam_t(&cam_extrinsics[3]);
 
     Eigen::Matrix<T, 3, 1> transformed_point;
+    
     // Rotate the point according the camera rotation
     ceres::AngleAxisRotatePoint(cam_R, pos_3dpoint, transformed_point.data());
 
     // Apply the camera translation
-    transformed_point += cam_t;
+    transformed_point += cam_t + cam_delta_t;
 
     // Transform the point from homogeneous to euclidean (undistorted point)
     const Eigen::Matrix<T, 2, 1> projected_point = transformed_point.hnormalized();
@@ -516,7 +527,7 @@ struct ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2
     {
       return
         (new ceres::AutoDiffCostFunction
-          <ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2, 2, 8, 6, 3>(
+          <ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2, 2, 8, 6, 3, 3>(
             new ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2(observation.data())));
     }
     else

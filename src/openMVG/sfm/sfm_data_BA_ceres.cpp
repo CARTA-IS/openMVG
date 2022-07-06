@@ -287,6 +287,35 @@ namespace openMVG
       // Data wrapper for refinement:
       Hash_Map<IndexT, std::vector<double>> map_intrinsics;
       Hash_Map<IndexT, std::vector<double>> map_poses;
+      Hash_Map<IndexT, std::vector<double>> map_velocities;
+
+      // Setup Velocities data & subparameterization
+      for (const auto &velocity_it : sfm_data.velocities)
+      {
+        const IndexT indexVelocity = velocity_it.first;
+
+        const TranslationVelocity &velocity = velocity_it.second;
+        const Vec3 v = velocity.velocity();
+
+        map_velocities[indexVelocity] = {v(0), v(1), v(2)};
+        double *parameter_block = &map_velocities.at(indexVelocity)[0];
+        problem.AddParameterBlock(parameter_block, 3);
+
+        // When rolling shutter option off
+        if (!options.use_rolling_shutter_opt)
+        {
+          // set the whole parameter block as constant for best performance
+          // set velocity value to zero and fix
+          std::cout << "Rolling Shutter Option Off" << std::endl;
+          problem.SetParameterBlockConstant(parameter_block);
+        }
+        else
+        {
+          // need update Velocity_Parameter_Type to subdivide type of velocities into translation and rotation
+          std::cout << "Rolling Shutter Option On" << std::endl;
+          problem.SetParameterBlockVariable(parameter_block);
+        }
+      }
 
       // Setup Poses data & subparametrization
       for (const auto &pose_it : sfm_data.poses)
@@ -341,6 +370,7 @@ namespace openMVG
         if (isValid(intrinsic_it.second->getType()))
         {
           map_intrinsics[indexCam] = intrinsic_it.second->getParams();
+          // When camera matrix exists.
           if (!map_intrinsics.at(indexCam).empty())
           {
             double *parameter_block = &map_intrinsics.at(indexCam)[0];
@@ -393,22 +423,26 @@ namespace openMVG
               IntrinsicsToCostFunction(sfm_data.intrinsics.at(view->id_intrinsic).get(),
                                        obs_it.second.x);
 
+          // Whether K exists or not
           if (cost_function)
           {
+            // When camera matrix exists
             if (!map_intrinsics.at(view->id_intrinsic).empty())
             {
               problem.AddResidualBlock(cost_function,
-                                       p_LossFunction,
-                                       &map_intrinsics.at(view->id_intrinsic)[0],
-                                       &map_poses.at(view->id_pose)[0],
-                                       structure_landmark_it.second.X.data());
+                                      p_LossFunction,
+                                      &map_intrinsics.at(view->id_intrinsic)[0],
+                                      &map_poses.at(view->id_pose)[0],
+                                      &map_velocities.at(view->id_pose)[0],
+                                      structure_landmark_it.second.X.data());
             }
+            // When camera matrix doesn't exist -> No camera info at all which means unusual
             else
             {
               problem.AddResidualBlock(cost_function,
-                                       p_LossFunction,
-                                       &map_poses.at(view->id_pose)[0],
-                                       structure_landmark_it.second.X.data());
+                        p_LossFunction,
+                        &map_poses.at(view->id_pose)[0],
+                        structure_landmark_it.second.X.data());
             }
           }
           else
@@ -484,33 +518,16 @@ namespace openMVG
           const sfm::ViewPriors *prior = dynamic_cast<sfm::ViewPriors *>(view_it.second.get());
           if (prior != nullptr && prior->b_use_pose_center_ && sfm_data.IsPoseAndIntrinsicDefined(prior))
           {
-            if(options.use_rolling_shutter_opt)
-            {
-              // Add the cost functor of TranslationVelocityError
-              // ceres::CostFunction *cost_function =
-              //     new ceres::AutoDiffCostFunction<TranslationVelocityError, 3, 6>(
-              //         new TranslationVelocityError(prior->pose_center_, prior->center_weight_));
-            
-              // problem.AddResidualBlock(
-              //   cost_function,
-              //   new ceres::HuberLoss(
-              //       Square(pose_center_robust_fitting_error)),
-              //   &map_poses.at(prior->id_view)[0]);
-              std::cout << "Rolling Shutter Option On" << std::endl;
-            }
-            else
-            {
-              // Add the cost functor (distance from Pose prior to the SfM_Data Pose center)
-              ceres::CostFunction *cost_function =
-                  new ceres::AutoDiffCostFunction<PoseCenterConstraintCostFunction, 3, 6>(
-                      new PoseCenterConstraintCostFunction(prior->pose_center_, prior->center_weight_));
+            // Add the cost functor (distance from Pose prior to the SfM_Data Pose center)
+            ceres::CostFunction *cost_function =
+                new ceres::AutoDiffCostFunction<PoseCenterConstraintCostFunction, 3, 6>(
+                    new PoseCenterConstraintCostFunction(prior->pose_center_, prior->center_weight_));
 
-              problem.AddResidualBlock(
-                cost_function,
-                new ceres::HuberLoss(
-                    Square(pose_center_robust_fitting_error)),
-                &map_poses.at(prior->id_view)[0]);
-            }
+            problem.AddResidualBlock(
+              cost_function,
+              new ceres::HuberLoss(
+                  Square(pose_center_robust_fitting_error)),
+              &map_poses.at(prior->id_view)[0]);
           }
         }
       }
