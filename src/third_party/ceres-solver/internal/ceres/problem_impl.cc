@@ -243,7 +243,7 @@ ResidualBlock* ProblemImpl::AddResidualBlock(
   // Check the sizes match.
   const vector<int32>& parameter_block_sizes =
       cost_function->parameter_block_sizes();
-
+      
   if (!options_.disable_all_safety_checks) {
     CHECK_EQ(parameter_block_sizes.size(), parameter_blocks.size())
         << "Number of blocks input is different than the number of blocks "

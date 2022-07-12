@@ -429,25 +429,6 @@ namespace openMVG
           ceres_options_.bUse_loss_function_ ? new ceres::HuberLoss(Square(4.0))
                                              : nullptr;
 
-      // Restore map_poses size
-      // for (const auto &pose_it : sfm_data.poses)
-      // {
-      //   const IndexT indexPose = pose_it.first;
-
-      //   const Pose3 &pose = pose_it.second;
-      //   const Mat3 R = pose.rotation();
-      //   const Vec3 t = pose.translation();
-
-      //   double angleAxis[3];
-      //   ceres::RotationMatrixToAngleAxis((const double *)R.data(), angleAxis);
-
-      //   // angleAxis + translation + velocity
-      //   map_poses[indexPose] = {angleAxis[0], angleAxis[1], angleAxis[2], t(0), t(1), t(2)};
-
-      //   double *parameter_block = &map_poses.at(indexPose)[0];
-      //   problem.AddParameterBlock(parameter_block, 6);
-      // }
-      
       // For all visibility add reprojections errors:
       for (auto &structure_landmark_it : sfm_data.structure)
       {
@@ -471,15 +452,11 @@ namespace openMVG
             // When camera matrix exists
             if (!map_intrinsics.at(view->id_intrinsic).empty())
             {
-              std::cout << "########## Check AddResidualBlock Below ##########" << std::endl;
-              std::cout << &map_poses.at(view->id_pose)[0] << std::endl;
-              std::cout << &map_intrinsics.at(view->id_intrinsic)[0] << std::endl;
               problem.AddResidualBlock(cost_function,
                                       p_LossFunction,
                                       &map_intrinsics.at(view->id_intrinsic)[0],
                                       &map_poses.at(view->id_pose)[0],
                                       structure_landmark_it.second.X.data());
-              std::cout << "########## Finished AddResidualBlock ##########" << std::endl;
             }
             // When camera matrix doesn't exist -> No camera info at all which means unusual
             else
