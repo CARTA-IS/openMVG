@@ -31,6 +31,7 @@
 
 #include "ceres/problem.h"
 
+#include <iostream>
 #include <vector>
 #include "ceres/crs_matrix.h"
 #include "ceres/problem_impl.h"
@@ -39,15 +40,16 @@ namespace ceres {
 
 using std::vector;
 
-Problem::Problem() : problem_impl_(new internal::ProblemImpl) {}
+Problem::Problem() : problem_impl_(new internal::ProblemImpl) {std::cout << "############################################################## problem without options" << std::endl;}
 Problem::Problem(const Problem::Options& options)
-    : problem_impl_(new internal::ProblemImpl(options)) {}
+    : problem_impl_(new internal::ProblemImpl(options)) {std::cout << "############################################################## problem with options" << std::endl;}
 Problem::~Problem() {}
 
 ResidualBlockId Problem::AddResidualBlock(
     CostFunction* cost_function,
     LossFunction* loss_function,
     const vector<double*>& parameter_blocks) {
+  std::cout << "############################################################## inside problem.cc AddResidualBlock" << std::endl;
   return problem_impl_->AddResidualBlock(cost_function,
                                          loss_function,
                                          parameter_blocks);
@@ -149,6 +151,7 @@ ResidualBlockId Problem::AddResidualBlock(
 }
 
 void Problem::AddParameterBlock(double* values, int size) {
+  std::cout << "############################################################## inside problem.cc AddParameterBlock" << std::endl;
   problem_impl_->AddParameterBlock(values, size);
 }
 

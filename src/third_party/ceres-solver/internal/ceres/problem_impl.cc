@@ -31,6 +31,7 @@
 
 #include "ceres/problem_impl.h"
 
+#include <iostream>
 #include <algorithm>
 #include <cstddef>
 #include <iterator>
@@ -92,7 +93,7 @@ ParameterBlock* ProblemImpl::InternalAddParameterBlock(double* values,
                                                        int size) {
   CHECK(values != NULL) << "Null pointer passed to AddParameterBlock "
                         << "for a parameter with size " << size;
-
+  std::cout << "############################################################## inside problem_impl.cc InternalAddParameterBlock" << std::endl;
   // Ignore the request if there is a block for the given pointer already.
   ParameterMap::iterator it = parameter_block_map_.find(values);
   if (it != parameter_block_map_.end()) {
@@ -237,10 +238,10 @@ ResidualBlock* ProblemImpl::AddResidualBlock(
     CostFunction* cost_function,
     LossFunction* loss_function,
     const vector<double*>& parameter_blocks) {
+  std::cout << "############################################################## inside problem_impl.cc AddResidualBlock" << std::endl;
   CHECK_NOTNULL(cost_function);
   CHECK_EQ(parameter_blocks.size(),
            cost_function->parameter_block_sizes().size());
-
   // Check the sizes match.
   const vector<int32>& parameter_block_sizes =
       cost_function->parameter_block_sizes();
@@ -454,6 +455,7 @@ ResidualBlock* ProblemImpl::AddResidualBlock(
 }
 
 void ProblemImpl::AddParameterBlock(double* values, int size) {
+  std::cout << "############################################################## inside AddParameterBlock" << std::endl;
   InternalAddParameterBlock(values, size);
 }
 

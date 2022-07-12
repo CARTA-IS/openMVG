@@ -287,35 +287,35 @@ namespace openMVG
       // Data wrapper for refinement:
       Hash_Map<IndexT, std::vector<double>> map_intrinsics;
       Hash_Map<IndexT, std::vector<double>> map_poses;
-      Hash_Map<IndexT, std::vector<double>> map_velocities;
+      // Hash_Map<IndexT, std::vector<double>> map_velocities;
 
-      // Setup Velocities data & subparameterization
-      for (const auto &velocity_it : sfm_data.velocities)
-      {
-        const IndexT indexVelocity = velocity_it.first;
+      // // Setup Velocities data & subparameterization
+      // for (const auto &velocity_it : sfm_data.velocities)
+      // {
+      //   const IndexT indexVelocity = velocity_it.first;
 
-        const TranslationVelocity &velocity = velocity_it.second;
-        const Vec3 v = velocity.velocity();
+      //   const TranslationVelocity &velocity = velocity_it.second;
+      //   const Vec3 v = velocity.velocity();
 
-        map_velocities[indexVelocity] = {v(0), v(1), v(2)};
-        double *parameter_block = &map_velocities.at(indexVelocity)[0];
-        problem.AddParameterBlock(parameter_block, 3);
+      //   map_velocities[indexVelocity] = {v(0), v(1), v(2)};
+      //   double *parameter_block = &map_velocities.at(indexVelocity)[0];
+      //   problem.AddParameterBlock(parameter_block, 3);
 
-        // When rolling shutter option off
-        if (!options.use_rolling_shutter_opt)
-        {
-          // set the whole parameter block as constant for best performance
-          // set velocity value to zero and fix
-          std::cout << "Rolling Shutter Option Off" << std::endl;
-          problem.SetParameterBlockConstant(parameter_block);
-        }
-        else
-        {
-          // need update Velocity_Parameter_Type to subdivide type of velocities into translation and rotation
-          std::cout << "Rolling Shutter Option On" << std::endl;
-          problem.SetParameterBlockVariable(parameter_block);
-        }
-      }
+      //   // When rolling shutter option off
+      //   if (!options.use_rolling_shutter_opt)
+      //   {
+      //     // set the whole parameter block as constant for best performance
+      //     // set velocity value to zero and fix
+      //     std::cout << "Rolling Shutter Option Off" << std::endl;
+      //     problem.SetParameterBlockConstant(parameter_block);
+      //   }
+      //   else
+      //   {
+      //     // need update Velocity_Parameter_Type to subdivide type of velocities into translation and rotation
+      //     std::cout << "Rolling Shutter Option On" << std::endl;
+      //     problem.SetParameterBlockVariable(parameter_block);
+      //   }
+      // }
 
       // Setup Poses data & subparametrization
       for (const auto &pose_it : sfm_data.poses)
@@ -328,11 +328,17 @@ namespace openMVG
 
         double angleAxis[3];
         ceres::RotationMatrixToAngleAxis((const double *)R.data(), angleAxis);
-        // angleAxis + translation
-        map_poses[indexPose] = {angleAxis[0], angleAxis[1], angleAxis[2], t(0), t(1), t(2)};
+
+        // Add sfm_data velocity
+        const TranslationVelocity &velocity = sfm_data.velocities[indexPose];
+        const Vec3 v = velocity.velocity();
+
+        // angleAxis + translation + velocity
+        map_poses[indexPose] = {angleAxis[0], angleAxis[1], angleAxis[2], t(0), t(1), t(2), v(0), v(1), v(2)};
 
         double *parameter_block = &map_poses.at(indexPose)[0];
-        problem.AddParameterBlock(parameter_block, 6);
+        std::cout << "############################################################## before pose AddParameterBlock" << std::endl;
+        problem.AddParameterBlock(parameter_block, 9);
         if (options.extrinsics_opt == Extrinsic_Parameter_Type::NONE)
         {
           // set the whole parameter block as constant for best performance
@@ -345,20 +351,38 @@ namespace openMVG
           if (options.extrinsics_opt == Extrinsic_Parameter_Type::ADJUST_TRANSLATION)
           {
             // Subset rotation parametrization
-            vec_constant_extrinsic.insert(vec_constant_extrinsic.end(), {0, 1, 2});
+            if (options.use_rolling_shutter_opt) {
+              std::cout << "Rolling Shutter Option On" << std::endl;
+              vec_constant_extrinsic.insert(vec_constant_extrinsic.end(), {0, 1, 2});
+            }
+            else {
+              vec_constant_extrinsic.insert(vec_constant_extrinsic.end(), {0, 1, 2, 6, 7, 8});
+            }
           }
           // If we adjust only the rotation, we must set TRANSLATION as constant
           if (options.extrinsics_opt == Extrinsic_Parameter_Type::ADJUST_ROTATION)
           {
             // Subset translation parametrization
-            vec_constant_extrinsic.insert(vec_constant_extrinsic.end(), {3, 4, 5});
+            if (options.use_rolling_shutter_opt) {
+              std::cout << "Rolling Shutter Option On" << std::endl;
+              vec_constant_extrinsic.insert(vec_constant_extrinsic.end(), {3, 4, 5});
+            }
+            else {
+              vec_constant_extrinsic.insert(vec_constant_extrinsic.end(), {3, 4, 5, 6, 7, 8});
+            }
           }
           if (!vec_constant_extrinsic.empty())
           {
             ceres::SubsetParameterization *subset_parameterization =
-                new ceres::SubsetParameterization(6, vec_constant_extrinsic);
+                new ceres::SubsetParameterization(9, vec_constant_extrinsic);
             problem.SetParameterization(parameter_block, subset_parameterization);
           }
+        }
+        if (options.use_rolling_shutter_opt) {
+          std::cout << "Rolling Shutter Option On" << std::endl;
+        }
+        else {
+          std::cout << "Rolling Shutter Option Off" << std::endl;
         }
       }
 
@@ -366,7 +390,6 @@ namespace openMVG
       for (const auto &intrinsic_it : sfm_data.intrinsics)
       {
         const IndexT indexCam = intrinsic_it.first;
-
         if (isValid(intrinsic_it.second->getType()))
         {
           map_intrinsics[indexCam] = intrinsic_it.second->getParams();
@@ -374,7 +397,9 @@ namespace openMVG
           if (!map_intrinsics.at(indexCam).empty())
           {
             double *parameter_block = &map_intrinsics.at(indexCam)[0];
+            std::cout << "############################################################## before instrinsic AddParameterBlock" << std::endl;
             problem.AddParameterBlock(parameter_block, map_intrinsics.at(indexCam).size());
+            std::cout << &map_intrinsics.at(indexCam)[0] << std::endl;
             if (options.intrinsics_opt == Intrinsic_Parameter_Type::NONE)
             {
               // set the whole parameter block as constant for best performance
@@ -406,6 +431,25 @@ namespace openMVG
           ceres_options_.bUse_loss_function_ ? new ceres::HuberLoss(Square(4.0))
                                              : nullptr;
 
+      // Restore map_poses size
+      // for (const auto &pose_it : sfm_data.poses)
+      // {
+      //   const IndexT indexPose = pose_it.first;
+
+      //   const Pose3 &pose = pose_it.second;
+      //   const Mat3 R = pose.rotation();
+      //   const Vec3 t = pose.translation();
+
+      //   double angleAxis[3];
+      //   ceres::RotationMatrixToAngleAxis((const double *)R.data(), angleAxis);
+
+      //   // angleAxis + translation + velocity
+      //   map_poses[indexPose] = {angleAxis[0], angleAxis[1], angleAxis[2], t(0), t(1), t(2)};
+
+      //   double *parameter_block = &map_poses.at(indexPose)[0];
+      //   problem.AddParameterBlock(parameter_block, 6);
+      // }
+      
       // For all visibility add reprojections errors:
       for (auto &structure_landmark_it : sfm_data.structure)
       {
@@ -429,12 +473,15 @@ namespace openMVG
             // When camera matrix exists
             if (!map_intrinsics.at(view->id_intrinsic).empty())
             {
+              std::cout << "############################################################## before AddResidualBlock" << std::endl;
+              std::cout << &map_poses.at(view->id_pose)[0] << std::endl;
+              std::cout << &map_intrinsics.at(view->id_intrinsic)[0] << std::endl;
               problem.AddResidualBlock(cost_function,
                                       p_LossFunction,
                                       &map_intrinsics.at(view->id_intrinsic)[0],
                                       &map_poses.at(view->id_pose)[0],
-                                      &map_velocities.at(view->id_pose)[0],
                                       structure_landmark_it.second.X.data());
+              std::cout << "############################################################## after AddResidualBlock" << std::endl;
             }
             // When camera matrix doesn't exist -> No camera info at all which means unusual
             else
