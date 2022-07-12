@@ -337,7 +337,6 @@ namespace openMVG
         map_poses[indexPose] = {angleAxis[0], angleAxis[1], angleAxis[2], t(0), t(1), t(2), v(0), v(1), v(2)};
 
         double *parameter_block = &map_poses.at(indexPose)[0];
-        std::cout << "############################################################## before pose AddParameterBlock" << std::endl;
         problem.AddParameterBlock(parameter_block, 9);
         if (options.extrinsics_opt == Extrinsic_Parameter_Type::NONE)
         {
@@ -397,9 +396,8 @@ namespace openMVG
           if (!map_intrinsics.at(indexCam).empty())
           {
             double *parameter_block = &map_intrinsics.at(indexCam)[0];
-            std::cout << "############################################################## before instrinsic AddParameterBlock" << std::endl;
             problem.AddParameterBlock(parameter_block, map_intrinsics.at(indexCam).size());
-            std::cout << &map_intrinsics.at(indexCam)[0] << std::endl;
+            // std::cout << &map_intrinsics.at(indexCam)[0] << std::endl;
             if (options.intrinsics_opt == Intrinsic_Parameter_Type::NONE)
             {
               // set the whole parameter block as constant for best performance
@@ -473,7 +471,7 @@ namespace openMVG
             // When camera matrix exists
             if (!map_intrinsics.at(view->id_intrinsic).empty())
             {
-              std::cout << "############################################################## before AddResidualBlock" << std::endl;
+              std::cout << "########## Check AddResidualBlock Below ##########" << std::endl;
               std::cout << &map_poses.at(view->id_pose)[0] << std::endl;
               std::cout << &map_intrinsics.at(view->id_intrinsic)[0] << std::endl;
               problem.AddResidualBlock(cost_function,
@@ -481,7 +479,7 @@ namespace openMVG
                                       &map_intrinsics.at(view->id_intrinsic)[0],
                                       &map_poses.at(view->id_pose)[0],
                                       structure_landmark_it.second.X.data());
-              std::cout << "############################################################## after AddResidualBlock" << std::endl;
+              std::cout << "########## Finished AddResidualBlock ##########" << std::endl;
             }
             // When camera matrix doesn't exist -> No camera info at all which means unusual
             else
