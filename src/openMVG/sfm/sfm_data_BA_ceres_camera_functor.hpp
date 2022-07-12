@@ -444,9 +444,8 @@ struct ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2
 
   /**
    * @param[in] cam_intrinsics: Camera intrinsics( focal, principal point [x,y], k1, k2, k3, t1, t2 )
-   * @param[in] cam_extrinsics: Camera parameterized using one block of 6 parameters [R;t]:
-   *   - 3 for rotation(angle axis), 3 for translation
-   * @param[in] cam_velocities: Camera translation velocities( vx, vy, vz )
+   * @param[in] cam_extrinsics: Camera parameterized using one block of 9 parameters [R;t;v]:
+   *   - 3 for rotation(angle axis), 3 for translation, 3 for velocity
    * @param[in] pos_3dpoint
    * @param[out] out_residuals
    */
@@ -454,15 +453,14 @@ struct ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2
   bool operator()(
     const T* const cam_intrinsics,
     const T* const cam_extrinsics,
-    const T* const cam_velocities,
     const T* const pos_3dpoint,
     T* out_residuals) const
   {
     // Time delay between lines
-    const T t = 0.03;
+    double t = 0.03;
     
     // Apply velocity parameters
-    Eigen::Map<const Eigen::Matrix<T, 3, 1>> cam_V((&cam_velocities[0]));
+    Eigen::Map<const Eigen::Matrix<T, 3, 1>> cam_V((&cam_extrinsics[6]));
     Eigen::Matrix<T, 3, 1> cam_delta_t = m_pos_2dpoint[1] * t * cam_V;
    
     //--
@@ -527,14 +525,14 @@ struct ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2
     {
       return
         (new ceres::AutoDiffCostFunction
-          <ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2, 2, 8, 6, 3, 3>(
+          <ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2, 2, 8, 9, 3>(
             new ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2(observation.data())));
     }
     else
     {
       return
         (new ceres::AutoDiffCostFunction
-          <WeightedCostFunction<ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2>, 2, 8, 6, 3>
+          <WeightedCostFunction<ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2>, 2, 8, 9, 3>
           (new WeightedCostFunction<ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2>
             (new ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2(observation.data()), weight)));
     }
