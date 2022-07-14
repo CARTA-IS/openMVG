@@ -80,7 +80,7 @@ int main(int argc, char **argv)
   std::string sOutDir = "";
   std::pair<std::string,std::string> initialPairString("","");
   std::string sIntrinsic_refinement_options = "ADJUST_ALL";
-  int i_User_camera_model = PINHOLE_CAMERA_RADIAL3;
+  int i_User_camera_model = PINHOLE_CAMERA_BROWN;
   bool b_use_motion_priors = false;
   bool b_use_rolling_shutter = false;
   int triangulation_method = static_cast<int>(ETriangulationMethod::DEFAULT);
@@ -240,6 +240,12 @@ int main(int argc, char **argv)
   b_use_motion_priors = cmd.used('P');
   sfmEngine.Set_Use_Motion_Prior(b_use_motion_priors);
   b_use_rolling_shutter = cmd.used('R');
+
+  std::cout << "\n" << "##############################" << std::endl;
+  std::cout << "Camera model option : " << EINTRINSIC(i_User_camera_model) << std::endl;
+  std::cout << "Rolling shutter option : " << b_use_rolling_shutter << std::endl;
+  std::cout << "##############################" << std::endl;
+
   sfmEngine.Set_Use_Rolling_Shutter(b_use_rolling_shutter);
   sfmEngine.SetTriangulationMethod(static_cast<ETriangulationMethod>(triangulation_method));
   sfmEngine.SetResectionMethod(static_cast<resection::SolverType>(resection_method));
