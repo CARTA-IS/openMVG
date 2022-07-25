@@ -102,6 +102,9 @@ private:
   /// Bundle adjustment to refine Structure; Motion and Intrinsics
   bool BundleAdjustment();
 
+  /// Bundle adjustment to refine Structure; Velocities
+  bool BundleAdjustment(bool velocity_param);
+
   /// Discard track with too large residual error
   bool badTrackRejector(double dPrecision, size_t count = 0);
 

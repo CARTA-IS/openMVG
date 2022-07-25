@@ -414,12 +414,11 @@ struct ResidualErrorFunctor_Pinhole_Intrinsic_Radial_K3
 /**
  * @brief Ceres functor with constrained 3D points to use a Pinhole_Intrinsic_Brown_T2
  *
- *  Data parameter blocks are the following <2,8,6,3,3>
+ *  Data parameter blocks are the following <2,8,9,3>
  *  - 2 => dimension of the residuals,
  *  - 8 => the intrinsic data block [focal, principal point x, principal point y, K1, K2, K3, T1, T2],
  *  - 6 => the camera extrinsic data block (camera orientation and position) [R;t],
- *         - rotation(angle axis), and translation [rX,rY,rZ,tx,ty,tz].
- *  - 3 => the camera velocity data block [vx, vy, vz]
+ *         - rotation(angle axis), translation and camera velocity [rX,rY,rZ,tx,ty,tz,vx,vy,vz].
  *  - 3 => a 3D point data block.
  *
  */
@@ -518,23 +517,45 @@ struct ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2
   static ceres::CostFunction* Create
   (
     const Vec2 & observation,
-    const double weight = 0.0
+    const double weight = 0.0,
+    bool rolling_shutter = false
   )
   {
-    if (weight == 0.0)
+    if (rolling_shutter)
     {
-      return
-        (new ceres::AutoDiffCostFunction
-          <ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2, 2, 8, 9, 3>(
-            new ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2(observation.data())));
+      if (weight == 0.0)
+      {
+        return
+          (new ceres::AutoDiffCostFunction
+            <ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2, 2, 8, 9, 3>(
+              new ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2(observation.data())));
+      }
+      else
+      {
+        return
+          (new ceres::AutoDiffCostFunction
+            <WeightedCostFunction<ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2>, 2, 8, 9, 3>
+            (new WeightedCostFunction<ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2>
+              (new ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2(observation.data()), weight)));
+      }
     }
     else
     {
-      return
-        (new ceres::AutoDiffCostFunction
-          <WeightedCostFunction<ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2>, 2, 8, 9, 3>
-          (new WeightedCostFunction<ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2>
-            (new ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2(observation.data()), weight)));
+      if (weight == 0.0)
+      {
+        return
+          (new ceres::AutoDiffCostFunction
+            <ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2, 2, 8, 6, 3>(
+              new ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2(observation.data())));
+      }
+      else
+      {
+        return
+          (new ceres::AutoDiffCostFunction
+            <WeightedCostFunction<ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2>, 2, 8, 6, 3>
+            (new WeightedCostFunction<ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2>
+              (new ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2(observation.data()), weight)));
+      }
     }
   }
 

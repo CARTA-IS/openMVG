@@ -25,7 +25,8 @@ ceres::CostFunction * IntrinsicsToCostFunction
 (
   cameras::IntrinsicBase * intrinsic,
   const Vec2 & observation,
-  const double weight = 0.0
+  const double weight = 0.0,
+  bool rolling_shutter = false
 );
 
 class Bundle_Adjustment_Ceres : public Bundle_Adjustment

@@ -117,7 +117,10 @@ namespace openMVG
 
       // Initial pair Essential Matrix and [R|t] estimation.
       if (!MakeInitialPair3D(initial_pair_))
+      {
+        std::cout << "\n" << "Failed making initial pair 3d" << std::endl;
         return false;
+      }
 
       // Compute robust Resection of remaining images
       // - group of images will be selected and resection + scene completion will be tried
@@ -150,6 +153,21 @@ namespace openMVG
         ++resectionGroupIndex;
       }
       // Ensure there is no remaining outliers
+      if (badTrackRejector(4.0, 0))
+      {
+        eraseUnstablePosesAndObservations(sfm_data_);
+      }
+
+      // After BA finished, implement BA with velocity parameter
+      std::cout << "\n" << "##############################" << std::endl;
+      std::cout << "Start BA for velocity optimization"<< std::endl;
+      std::cout << "##############################" << std::endl;
+      bool velocity_param = true;
+      do
+      {
+        BundleAdjustment(velocity_param);
+      } while (badTrackRejector(4.0, 50));
+      
       if (badTrackRejector(4.0, 0))
       {
         eraseUnstablePosesAndObservations(sfm_data_);
@@ -587,7 +605,10 @@ namespace openMVG
 
         // Init structure
         Landmarks &landmarks = tiny_scene.structure;
-
+        std::cout << "\n" << "##############################" << std::endl;
+        std::cout << "sfm_data_.structure size : " << sfm_data_.structure.size() << std::endl;
+        std::cout << "initial landmarks.size() : " << landmarks.size() << std::endl;
+        std::cout << "##############################" << std::endl;
         for (const auto &track_iterator : map_tracksCommon)
         {
           // Get corresponding points
@@ -618,6 +639,11 @@ namespace openMVG
             landmarks[track_iterator.first].X = X;
           }
         }
+        std::cout << "\n" << "##############################" << std::endl;
+        std::cout << "sfm_data_.structure size : " << sfm_data_.structure.size() << std::endl;
+        std::cout << "after triangulate landmarks.size() : " << landmarks.size() << std::endl;
+        std::cout << "##############################" << std::endl;
+
         Save(tiny_scene, stlplus::create_filespec(sOut_directory_, "initialPair.ply"), ESfM_Data(ALL));
 
         // - refine only Structure and Rotations & translations (keep intrinsic constant)
@@ -628,12 +654,19 @@ namespace openMVG
                                           Optimize_Options(
                                               Intrinsic_Parameter_Type::NONE,       // Keep intrinsic constant
                                               Extrinsic_Parameter_Type::ADJUST_ALL, // Adjust camera motion
-                                              Structure_Parameter_Type::ADJUST_ALL) // Adjust structure
+                                              Structure_Parameter_Type::ADJUST_ALL,
+                                              this->b_use_motion_prior_,
+                                              this->b_use_rolling_shutter_,
+                                              this->b_use_velocity_optimization_) // Adjust structure
                                           ))
         {
           return false;
         }
-
+        std::cout << "\n" << "##############################" << std::endl;
+        std::cout << "after ba sfm_data_.structure size : " << sfm_data_.structure.size() << std::endl;
+        std::cout << "landmarks.size() : " << landmarks.size() << std::endl;
+        std::cout << "##############################" << std::endl;
+        
         // Save computed data
         const Pose3 pose_I = sfm_data_.poses[view_I->id_pose] = tiny_scene.poses[view_I->id_pose];
         const Pose3 pose_J = sfm_data_.poses[view_J->id_pose] = tiny_scene.poses[view_J->id_pose];
@@ -642,9 +675,13 @@ namespace openMVG
         set_remaining_view_id_.erase(view_I->id_view);
         set_remaining_view_id_.erase(view_J->id_view);
 
+        int trackCount = 0;
+        int CheiralityTestCount = 0;
         // List inliers and save them
         for (const auto &landmark_entry : tiny_scene.GetLandmarks())
         {
+          trackCount = trackCount + 1;
+
           const IndexT trackId = landmark_entry.first;
           const Landmark &landmark = landmark_entry.second;
           const Observations &obs = landmark.obs;
@@ -662,6 +699,13 @@ namespace openMVG
               pose_I, cam_I, pose_J, cam_J, ob_xI_ud, ob_xJ_ud);
           const Vec2 residual_I = cam_I->residual(pose_I(landmark.X), ob_xI.x);
           const Vec2 residual_J = cam_J->residual(pose_J(landmark.X), ob_xJ.x);
+          // std::cout << "\n" << "##############################" << std::endl;
+          // std::cout << "angle : " << angle << std::endl;
+          // std::cout << "pose_I.rotation() : " << pose_I.rotation() << std::endl;
+          // std::cout << "pose_I.center() : " << pose_I.center() << std::endl;
+          // std::cout << "pose_J.rotation() : " << pose_J.rotation() << std::endl;
+          // std::cout << "pose_J.center() : " << pose_J.center() << std::endl;
+          // std::cout << "##############################" << std::endl;
           if (angle > 2.0 &&
               CheiralityTest((*cam_I)(ob_xI_ud), pose_I,
                              (*cam_J)(ob_xJ_ud), pose_J,
@@ -670,8 +714,15 @@ namespace openMVG
               residual_J.norm() < relativePose_info.found_residual_precision)
           {
             sfm_data_.structure[trackId] = landmarks[trackId];
+            CheiralityTestCount = CheiralityTestCount + 1;
           }
         }
+        std::cout << "\n" << "##############################" << std::endl;
+        std::cout << "count trackId : " << trackCount << std::endl;
+        std::cout << "count CheiralityTest : " << CheiralityTestCount << std::endl;
+        std::cout << "landmarks.size() : " << landmarks.size() << std::endl;
+        std::cout << "sfm_data_.structure size : " << sfm_data_.structure.size() << std::endl;
+        std::cout << "##############################" << std::endl;
         // Save outlier residual information
         Histogram<double> histoResiduals;
         std::cout << "\n"
@@ -732,6 +783,7 @@ namespace openMVG
           htmlFileStream << html_doc_stream_->getDoc();
         }
       }
+      std::cout << "\n" << "Is sfm_data_.structure empty? : " << sfm_data_.structure.empty() <<std::endl;
       return !sfm_data_.structure.empty();
     }
 
@@ -739,6 +791,7 @@ namespace openMVG
     {
       // Collect residuals for each observation
       std::vector<float> vec_residuals;
+      std::cout << "\n" << "sfm_data_.structure size : " << sfm_data_.structure.size() << std::endl;
       vec_residuals.reserve(sfm_data_.structure.size());
       for (const auto &landmark_entry : sfm_data_.GetLandmarks())
       {
@@ -1249,7 +1302,38 @@ namespace openMVG
                                                Structure_Parameter_Type::ADJUST_ALL, // Adjust scene structure
                                                Control_Point_Parameter(),
                                                this->b_use_motion_prior_,
-                                               this->b_use_rolling_shutter_);
+                                               this->b_use_rolling_shutter_,
+                                               this->b_use_velocity_optimization_
+                                               );
+      return bundle_adjustment_obj.Adjust(sfm_data_, ba_refine_options);
+    }
+
+    /// Bundle adjustment to refine Structure; Velocities
+    bool SequentialSfMReconstructionEngine::BundleAdjustment(bool velocity_param)
+    {
+      Bundle_Adjustment_Ceres::BA_Ceres_options options;
+      if (sfm_data_.GetPoses().size() > 100 &&
+          (ceres::IsSparseLinearAlgebraLibraryTypeAvailable(ceres::SUITE_SPARSE) ||
+           ceres::IsSparseLinearAlgebraLibraryTypeAvailable(ceres::CX_SPARSE) ||
+           ceres::IsSparseLinearAlgebraLibraryTypeAvailable(ceres::EIGEN_SPARSE)))
+      // Enable sparse BA only if a sparse lib is available and if there more than 100 poses
+      {
+        options.preconditioner_type_ = ceres::JACOBI;
+        options.linear_solver_type_ = ceres::SPARSE_SCHUR;
+      }
+      else
+      {
+        options.linear_solver_type_ = ceres::DENSE_SCHUR;
+      }
+      Bundle_Adjustment_Ceres bundle_adjustment_obj(options);
+      const Optimize_Options ba_refine_options(ReconstructionEngine::intrinsic_refinement_options_,
+                                               Extrinsic_Parameter_Type::ADJUST_VELOCITY, // Adjust camera velocity
+                                               Structure_Parameter_Type::ADJUST_ALL, // Adjust scene structure
+                                               Control_Point_Parameter(),
+                                               this->b_use_motion_prior_,
+                                               this->b_use_rolling_shutter_,
+                                               velocity_param
+                                               );
       return bundle_adjustment_obj.Adjust(sfm_data_, ba_refine_options);
     }
 

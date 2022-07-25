@@ -32,7 +32,8 @@ public:
     sfm_data_(sfm_data),
     intrinsic_refinement_options_(cameras::Intrinsic_Parameter_Type::ADJUST_ALL),
     b_use_motion_prior_(false),
-    b_use_rolling_shutter_(false)
+    b_use_rolling_shutter_(false),
+    b_use_velocity_optimization_(false)
   {
   }
 
@@ -85,6 +86,7 @@ protected:
   cameras::Intrinsic_Parameter_Type intrinsic_refinement_options_;
   bool b_use_motion_prior_;
   bool b_use_rolling_shutter_;
+  bool b_use_velocity_optimization_;
 };
 
 } // namespace sfm

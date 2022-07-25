@@ -33,6 +33,7 @@ enum class Extrinsic_Parameter_Type : int
   NONE                = 1,     // Extrinsic parameters will be considered as FIXED
   ADJUST_ROTATION     = 2,
   ADJUST_TRANSLATION  = 4,
+  ADJUST_VELOCITY     = 8,
   ADJUST_ALL = ADJUST_ROTATION | ADJUST_TRANSLATION
 };
 
@@ -65,6 +66,7 @@ struct Optimize_Options
   Control_Point_Parameter control_point_opt;
   bool use_motion_priors_opt;
   bool use_rolling_shutter_opt;
+  bool use_velocity_optimization;
 
   Optimize_Options
   (
@@ -73,14 +75,16 @@ struct Optimize_Options
     const Structure_Parameter_Type structure = Structure_Parameter_Type::ADJUST_ALL,
     const Control_Point_Parameter & control_point = Control_Point_Parameter(0.0, false), // Default setting does not use GCP in the BA
     const bool use_motion_priors = false,
-    const bool use_rolling_shutter = true
+    const bool use_rolling_shutter = false,
+    const bool use_velocity_optimization = false
   )
   :intrinsics_opt(intrinsics),
    extrinsics_opt(extrinsics),
    structure_opt(structure),
    control_point_opt(control_point),
    use_motion_priors_opt(use_motion_priors),
-   use_rolling_shutter_opt(use_rolling_shutter)
+   use_rolling_shutter_opt(use_rolling_shutter),
+   use_velocity_optimization(use_velocity_optimization)
   {
   }
 };
