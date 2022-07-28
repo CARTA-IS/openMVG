@@ -70,6 +70,11 @@ public:
     b_use_rolling_shutter_ = rhs;
   }
 
+  bool Return_Rolling_Shutter_Option()
+  {
+    return b_use_rolling_shutter_;
+  }
+
   const SfM_Data & Get_SfM_Data() const {return sfm_data_;}
 
 protected:

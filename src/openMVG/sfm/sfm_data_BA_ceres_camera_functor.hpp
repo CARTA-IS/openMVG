@@ -523,6 +523,9 @@ struct ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2
   {
     if (rolling_shutter)
     {
+      std::cout << "\n" << "############################################################" << std::endl;
+      std::cout << "Rolling Shutter Brown Model" << std::endl;
+      std::cout << "############################################################" << std::endl;
       if (weight == 0.0)
       {
         return

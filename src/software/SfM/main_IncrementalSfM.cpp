@@ -246,7 +246,7 @@ int main(int argc, char **argv)
 
   std::cout << "\n" << "##############################" << std::endl;
   std::cout << "Camera model option : " << EINTRINSIC(i_User_camera_model) << std::endl;
-  std::cout << "Rolling shutter option : " << std::boolalpha << b_use_rolling_shutter << std::endl;
+  std::cout << "Rolling shutter option : " << std::boolalpha << sfmEngine.Return_Rolling_Shutter_Option() << std::endl;
   std::cout << "##############################" << std::endl;
   
   // Handle Initial pair parameter

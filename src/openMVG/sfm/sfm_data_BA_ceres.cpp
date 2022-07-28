@@ -228,8 +228,10 @@ namespace openMVG
       //----------
 
       std::cout << "\n" << "##############################" << std::endl;
-      std::cout << "Rolling shutter option : " << std::boolalpha << options.use_rolling_shutter_opt << std::endl;
-      std::cout << "Velocity optimization option : " << options.use_velocity_optimization << std::endl;
+      std::cout << "Inside Adjust Function" << std::endl;
+      std::cout << "Rolling Shutter Option in Adjust : " << std::boolalpha << options.use_rolling_shutter_opt << std::endl;
+      std::cout << "Velocity Optimization Option : " << options.use_velocity_optimization << std::endl;
+      std::cout << "Extrinsic_Parameter_Type : " << static_cast<int>(options.extrinsics_opt) << std::endl;
       std::cout << "##############################" << std::endl;
 
       double pose_center_robust_fitting_error = 0.0;
@@ -324,23 +326,24 @@ namespace openMVG
         double *parameter_block = &map_poses.at(indexPose)[0];
         if (options.use_rolling_shutter_opt)
         {
+          std::cout << "\n" << "############################################################" << std::endl;
+          std::cout << "Rolling Shutter Optimization" << std::endl;
+          std::cout << "############################################################" << std::endl;
+
           problem.AddParameterBlock(parameter_block, 9);
           std::vector<int> vec_constant_extrinsic;
 
           if (options.extrinsics_opt == Extrinsic_Parameter_Type::ADJUST_ALL)
           {
-            std::cout << "\n" << "############################################################" << std::endl;
-            std::cout << "Rolling Shutter Optimization: Rotation & Translation" << std::endl;
-            std::cout << "############################################################" << std::endl;
+            std::cout << "Rotation & Translation" << std::endl;
             vec_constant_extrinsic.insert(vec_constant_extrinsic.end(), {6, 7, 8});
           }
-          if (options.extrinsics_opt == Extrinsic_Parameter_Type::ADJUST_VELOCITY)
+          else if (options.extrinsics_opt == Extrinsic_Parameter_Type::ADJUST_VELOCITY)
           {
-            std::cout << "\n" << "########################################" << std::endl;
-            std::cout << "Rolling Shutter Optimization: Velocity" << std::endl;
-            std::cout << "########################################" << std::endl;
+            std::cout << "Velocity" << std::endl;
             vec_constant_extrinsic.insert(vec_constant_extrinsic.end(), {0, 1, 2, 3, 4, 5});
           }
+          
           if (options.extrinsics_opt == Extrinsic_Parameter_Type::NONE)
           {
             // set the whole parameter block as constant for best performance
@@ -370,6 +373,10 @@ namespace openMVG
         }
         else
         {
+          std::cout << "\n" << "############################################################" << std::endl;
+          std::cout << "Global Optimization" << std::endl;
+          std::cout << "############################################################" << std::endl;
+
           problem.AddParameterBlock(parameter_block, 6);
           std::vector<int> vec_constant_extrinsic;
           
@@ -461,7 +468,9 @@ namespace openMVG
           // image location and compares the reprojection against the observation.
           ceres::CostFunction *cost_function =
               IntrinsicsToCostFunction(sfm_data.intrinsics.at(view->id_intrinsic).get(),
-                                       obs_it.second.x);
+                                       obs_it.second.x,
+                                       0.0,
+                                       options.use_rolling_shutter_opt);
 
           // Whether K exists or not
           if (cost_function)
@@ -514,7 +523,8 @@ namespace openMVG
                 IntrinsicsToCostFunction(
                     sfm_data.intrinsics.at(view->id_intrinsic).get(),
                     obs_it.second.x,
-                    options.control_point_opt.weight);
+                    options.control_point_opt.weight,
+                    options.use_rolling_shutter_opt);
             
             if (cost_function)
             {
@@ -633,9 +643,12 @@ namespace openMVG
             ceres::AngleAxisToRotationMatrix(&map_poses.at(indexPose)[0], R_refined.data());
             Vec3 t_refined(map_poses.at(indexPose)[3], map_poses.at(indexPose)[4], map_poses.at(indexPose)[5]);
             
-            std::cout << "\n" << "################################################" << std::endl;
-            std::cout << "Velocity after BA : " << map_poses.at(indexPose)[6] << map_poses.at(indexPose)[7] << map_poses.at(indexPose)[8] << std::endl;
-            std::cout << "################################################" << std::endl;
+            if (options.use_rolling_shutter_opt)
+            {
+              std::cout << "\n" << "################################################" << std::endl;
+              std::cout << "Velocity after BA : " << map_poses.at(indexPose)[6] << " " << map_poses.at(indexPose)[7] << " " << map_poses.at(indexPose)[8] << std::endl;
+              std::cout << "################################################" << std::endl;
+            }
 
             // Update the pose
             Pose3 &pose = pose_it.second;

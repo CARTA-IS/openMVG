@@ -19,6 +19,7 @@
 #include "openMVG/sfm/sfm_data_filters.hpp"
 #include "openMVG/sfm/sfm_data_io.hpp"
 #include "openMVG/stl/stl.hpp"
+#include "openMVG/sfm/pipelines/sfm_engine.hpp"
 
 #include "third_party/histogram/histogram.hpp"
 #include "third_party/htmlDoc/htmlDoc.hpp"
@@ -144,6 +145,9 @@ namespace openMVG
           Save(sfm_data_, stlplus::create_filespec(sOut_directory_, os.str(), ".ply"), ESfM_Data(ALL));
 
           // Perform BA until all point are under the given precision
+          std::cout << "\n" << "##############################" << std::endl;
+          std::cout << "Start BA for rotation & translation optimization"<< std::endl;
+          std::cout << "##############################" << std::endl;
           do
           {
             BundleAdjustment();
@@ -650,11 +654,17 @@ namespace openMVG
         Bundle_Adjustment_Ceres::BA_Ceres_options options(true, true);
         options.linear_solver_type_ = ceres::DENSE_SCHUR;
         Bundle_Adjustment_Ceres bundle_adjustment_obj(options);
+        
+        std::cout << "\n" << "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@" << std::endl;
+        std::cout << "Rolling Shutter Option before Adjust : " << this->b_use_rolling_shutter_ << std::endl;
+        std::cout << "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@" << std::endl;
+
         if (!bundle_adjustment_obj.Adjust(tiny_scene,
                                           Optimize_Options(
                                               Intrinsic_Parameter_Type::NONE,       // Keep intrinsic constant
                                               Extrinsic_Parameter_Type::ADJUST_ALL, // Adjust camera motion
                                               Structure_Parameter_Type::ADJUST_ALL,
+                                              Control_Point_Parameter(),
                                               this->b_use_motion_prior_,
                                               this->b_use_rolling_shutter_,
                                               this->b_use_velocity_optimization_) // Adjust structure
@@ -663,7 +673,7 @@ namespace openMVG
           return false;
         }
         std::cout << "\n" << "##############################" << std::endl;
-        std::cout << "after ba sfm_data_.structure size : " << sfm_data_.structure.size() << std::endl;
+        std::cout << "after tiny BA sfm_data_.structure size : " << sfm_data_.structure.size() << std::endl;
         std::cout << "landmarks.size() : " << landmarks.size() << std::endl;
         std::cout << "##############################" << std::endl;
         
@@ -1117,12 +1127,32 @@ namespace openMVG
         }
         const bool b_refine_pose = true;
         const bool b_refine_intrinsics = false;
-        if (!sfm::SfM_Localizer::RefinePose(
-                optional_intrinsic.get(), pose,
-                resection_data, b_refine_pose, b_refine_intrinsics))
+        
+        if (this->b_use_rolling_shutter_)
         {
-          return false;
+          if (!sfm::SfM_Localizer::RefinePoseRolling(
+                  optional_intrinsic.get(), pose,
+                  resection_data, b_refine_pose, b_refine_intrinsics,
+                  this->b_use_motion_prior_,
+                  this->b_use_rolling_shutter_,
+                  false
+          ))
+          {
+            return false;
+          }
         }
+        else
+        {
+          if (!sfm::SfM_Localizer::RefinePose(
+                  optional_intrinsic.get(), pose,
+                  resection_data, b_refine_pose, b_refine_intrinsics))
+          {
+            return false;
+          }
+        }
+      std::cout << "\n" << "##############################" << std::endl;
+      std::cout << "Finish RefinePose BundleAdjustment"<< std::endl;
+      std::cout << "##############################" << std::endl;
 
         // E. Update the global scene with:
         // - the new found camera pose
@@ -1282,6 +1312,9 @@ namespace openMVG
     /// Bundle adjustment to refine Structure; Motion and Intrinsics
     bool SequentialSfMReconstructionEngine::BundleAdjustment()
     {
+      std::cout << "\n" << "##############################" << std::endl;
+      std::cout << "Non velocity BundleAdjustment"<< std::endl;
+      std::cout << "##############################" << std::endl;
       Bundle_Adjustment_Ceres::BA_Ceres_options options;
       if (sfm_data_.GetPoses().size() > 100 &&
           (ceres::IsSparseLinearAlgebraLibraryTypeAvailable(ceres::SUITE_SPARSE) ||
@@ -1311,6 +1344,9 @@ namespace openMVG
     /// Bundle adjustment to refine Structure; Velocities
     bool SequentialSfMReconstructionEngine::BundleAdjustment(bool velocity_param)
     {
+      std::cout << "\n" << "##############################" << std::endl;
+      std::cout << "With velocity BundleAdjustment"<< std::endl;
+      std::cout << "##############################" << std::endl;
       Bundle_Adjustment_Ceres::BA_Ceres_options options;
       if (sfm_data_.GetPoses().size() > 100 &&
           (ceres::IsSparseLinearAlgebraLibraryTypeAvailable(ceres::SUITE_SPARSE) ||
