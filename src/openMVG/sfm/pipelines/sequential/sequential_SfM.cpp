@@ -133,6 +133,9 @@ namespace openMVG
         // Add images to the 3D reconstruction
         for (const auto &iter : vec_possible_resection_indexes)
         {
+          std::cout << "\n" << "##############################" << std::endl;
+          std::cout << "Start Resection"<< std::endl;
+          std::cout << "##############################" << std::endl;
           bImageAdded |= Resection(iter);
           set_remaining_view_id_.erase(iter);
         }
@@ -1150,9 +1153,10 @@ namespace openMVG
             return false;
           }
         }
-      std::cout << "\n" << "##############################" << std::endl;
-      std::cout << "Finish RefinePose BundleAdjustment"<< std::endl;
-      std::cout << "##############################" << std::endl;
+
+        std::cout << "\n" << "##############################" << std::endl;
+        std::cout << "Finish RefinePose BA"<< std::endl;
+        std::cout << "##############################" << std::endl;
 
         // E. Update the global scene with:
         // - the new found camera pose
@@ -1313,7 +1317,7 @@ namespace openMVG
     bool SequentialSfMReconstructionEngine::BundleAdjustment()
     {
       std::cout << "\n" << "##############################" << std::endl;
-      std::cout << "Non velocity BundleAdjustment"<< std::endl;
+      std::cout << "Without Velocity BundleAdjustment"<< std::endl;
       std::cout << "##############################" << std::endl;
       Bundle_Adjustment_Ceres::BA_Ceres_options options;
       if (sfm_data_.GetPoses().size() > 100 &&
@@ -1345,7 +1349,7 @@ namespace openMVG
     bool SequentialSfMReconstructionEngine::BundleAdjustment(bool velocity_param)
     {
       std::cout << "\n" << "##############################" << std::endl;
-      std::cout << "With velocity BundleAdjustment"<< std::endl;
+      std::cout << "With Velocity BundleAdjustment"<< std::endl;
       std::cout << "##############################" << std::endl;
       Bundle_Adjustment_Ceres::BA_Ceres_options options;
       if (sfm_data_.GetPoses().size() > 100 &&
