@@ -166,18 +166,21 @@ namespace openMVG
       }
 
       // After BA finished, implement BA with velocity parameter
-      std::cout << "\n" << "##############################" << std::endl;
-      std::cout << "Start BA for Velocity optimization"<< std::endl;
-      std::cout << "##############################" << std::endl;
-      bool velocity_param = true;
-      do
+      if (this->b_use_rolling_shutter_)
       {
-        BundleAdjustment(velocity_param);
-      } while (badTrackRejector(4.0, 50));
-      
-      if (badTrackRejector(4.0, 0))
-      {
-        eraseUnstablePosesAndObservations(sfm_data_);
+        std::cout << "\n" << "##############################" << std::endl;
+        std::cout << "Start BA for Velocity optimization"<< std::endl;
+        std::cout << "##############################" << std::endl;
+        bool velocity_param = true;
+        do
+        {
+          BundleAdjustment(velocity_param);
+        } while (badTrackRejector(4.0, 50));
+        
+        if (badTrackRejector(4.0, 0))
+        {
+          eraseUnstablePosesAndObservations(sfm_data_);
+        }
       }
 
       //-- Reconstruction done.
