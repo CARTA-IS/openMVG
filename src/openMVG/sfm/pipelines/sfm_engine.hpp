@@ -75,6 +75,11 @@ public:
     return b_use_rolling_shutter_;
   }
 
+  std::string Return_sOut_directory()
+  {
+    return sOut_directory_;
+  } 
+
   const SfM_Data & Get_SfM_Data() const {return sfm_data_;}
 
 protected:

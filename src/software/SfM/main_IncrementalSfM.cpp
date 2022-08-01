@@ -244,9 +244,13 @@ int main(int argc, char **argv)
   sfmEngine.SetTriangulationMethod(static_cast<ETriangulationMethod>(triangulation_method));
   sfmEngine.SetResectionMethod(static_cast<resection::SolverType>(resection_method));
 
+  bool rolling_shutter_option = sfmEngine.Return_Rolling_Shutter_Option();
+  std::string dir = sfmEngine.Return_sOut_directory();
+
   std::cout << "\n" << "##############################" << std::endl;
   std::cout << "Camera model option : " << EINTRINSIC(i_User_camera_model) << std::endl;
-  std::cout << "Rolling shutter option : " << std::boolalpha << sfmEngine.Return_Rolling_Shutter_Option() << std::endl;
+  std::cout << "Rolling shutter option : " << std::boolalpha << rolling_shutter_option << std::endl;
+  std::cout << "Output directory : " << dir << std::endl;
   std::cout << "##############################" << std::endl;
   
   // Handle Initial pair parameter
@@ -261,7 +265,7 @@ int main(int argc, char **argv)
     }
     sfmEngine.setInitialPair(initialPairIndex);
   }
-
+  
   if (sfmEngine.Process())
   {
     std::cout << std::endl << " Total Ac-Sfm took (s): " << timer.elapsed() << std::endl;

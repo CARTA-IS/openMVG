@@ -24,11 +24,13 @@
 #include "openMVG/sfm/sfm_data_transform.hpp"
 #include "openMVG/sfm/sfm_data.hpp"
 #include "openMVG/types.hpp"
+#include "openMVG/sfm/pipelines/sfm_engine.hpp"
 
 #include <ceres/rotation.h>
 #include <ceres/types.h>
 
 #include <iostream>
+#include <fstream>
 #include <limits>
 
 namespace openMVG
@@ -230,7 +232,7 @@ namespace openMVG
       std::cout << "\n" << "##############################" << std::endl;
       std::cout << "Inside Adjust Function" << std::endl;
       std::cout << "Rolling Shutter Option in Adjust : " << std::boolalpha << options.use_rolling_shutter_opt << std::endl;
-      std::cout << "Velocity Optimization Option : " << options.use_velocity_optimization << std::endl;
+      std::cout << "Velocity Optimization Option : " << options.use_velocity_optimization_opt << std::endl;
       std::cout << "Extrinsic_Parameter_Type : " << static_cast<int>(options.extrinsics_opt) << std::endl;
       std::cout << "##############################" << std::endl;
 
@@ -631,24 +633,50 @@ namespace openMVG
         // Update camera poses with refined data
         if (options.extrinsics_opt != Extrinsic_Parameter_Type::NONE)
         {
-          for (auto &pose_it : sfm_data.poses)
+          if (options.use_velocity_optimization_opt)
           {
-            const IndexT indexPose = pose_it.first;
+            std::ofstream foutput;
+            std::string directory = options.output_directory;
+            foutput.open(directory + "/velocity.txt", std::ios_base::app);
 
-            Mat3 R_refined;
-            ceres::AngleAxisToRotationMatrix(&map_poses.at(indexPose)[0], R_refined.data());
-            Vec3 t_refined(map_poses.at(indexPose)[3], map_poses.at(indexPose)[4], map_poses.at(indexPose)[5]);
-            
-            if (options.use_velocity_optimization)
+            for (auto &pose_it : sfm_data.poses)
             {
-              std::cout << "\n" << "################################################" << std::endl;
-              std::cout << "Velocity after BA : " << map_poses.at(indexPose)[6] << " " << map_poses.at(indexPose)[7] << " " << map_poses.at(indexPose)[8] << std::endl;
-              std::cout << "################################################" << std::endl;
-            }
+              const IndexT indexPose = pose_it.first;
 
-            // Update the pose
-            Pose3 &pose = pose_it.second;
-            pose = Pose3(R_refined, -R_refined.transpose() * t_refined);
+              Mat3 R_refined;
+              ceres::AngleAxisToRotationMatrix(&map_poses.at(indexPose)[0], R_refined.data());
+              Vec3 t_refined(map_poses.at(indexPose)[3], map_poses.at(indexPose)[4], map_poses.at(indexPose)[5]);
+              
+              if (options.use_velocity_optimization_opt)
+              {
+                if (foutput.is_open())
+                {
+                  foutput << map_poses.at(indexPose)[6] << " " << map_poses.at(indexPose)[7] << " " << map_poses.at(indexPose)[8] << "\n";
+                }
+                std::cout << "\n" << "################################################" << std::endl;
+                std::cout << "Velocity after BA : " << map_poses.at(indexPose)[6] << " " << map_poses.at(indexPose)[7] << " " << map_poses.at(indexPose)[8] << std::endl;
+                std::cout << "################################################" << std::endl;
+              }
+
+              // Update the pose
+              Pose3 &pose = pose_it.second;
+              pose = Pose3(R_refined, -R_refined.transpose() * t_refined);
+            }
+            foutput.close();
+          }
+          else
+          {
+            for (auto &pose_it : sfm_data.poses)
+            {
+              const IndexT indexPose = pose_it.first;
+
+              Mat3 R_refined;
+              ceres::AngleAxisToRotationMatrix(&map_poses.at(indexPose)[0], R_refined.data());
+              Vec3 t_refined(map_poses.at(indexPose)[3], map_poses.at(indexPose)[4], map_poses.at(indexPose)[5]);
+              // Update the pose
+              Pose3 &pose = pose_it.second;
+              pose = Pose3(R_refined, -R_refined.transpose() * t_refined);
+            }
           }
         }
       

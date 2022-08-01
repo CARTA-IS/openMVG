@@ -149,7 +149,7 @@ namespace openMVG
 
           // Perform BA until all point are under the given precision
           std::cout << "\n" << "##############################" << std::endl;
-          std::cout << "Start BA for rotation & translation optimization"<< std::endl;
+          std::cout << "Start BA for Rotation & Translation optimization"<< std::endl;
           std::cout << "##############################" << std::endl;
           do
           {
@@ -167,7 +167,7 @@ namespace openMVG
 
       // After BA finished, implement BA with velocity parameter
       std::cout << "\n" << "##############################" << std::endl;
-      std::cout << "Start BA for velocity optimization"<< std::endl;
+      std::cout << "Start BA for Velocity optimization"<< std::endl;
       std::cout << "##############################" << std::endl;
       bool velocity_param = true;
       do
@@ -1340,7 +1340,8 @@ namespace openMVG
                                                Control_Point_Parameter(),
                                                this->b_use_motion_prior_,
                                                this->b_use_rolling_shutter_,
-                                               this->b_use_velocity_optimization_
+                                               this->b_use_velocity_optimization_,
+                                               this->sOut_directory_
                                                );
       return bundle_adjustment_obj.Adjust(sfm_data_, ba_refine_options);
     }
@@ -1372,7 +1373,8 @@ namespace openMVG
                                                Control_Point_Parameter(),
                                                this->b_use_motion_prior_,
                                                this->b_use_rolling_shutter_,
-                                               velocity_param
+                                               velocity_param,
+                                               this->sOut_directory_
                                                );
       return bundle_adjustment_obj.Adjust(sfm_data_, ba_refine_options);
     }
