@@ -542,6 +542,7 @@ struct ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2
     }
     else
     {
+      // std::cout << "Global Shutter Brown Model" << std::endl;
       if (weight == 0.0)
       {
         return

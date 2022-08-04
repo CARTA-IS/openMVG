@@ -615,10 +615,10 @@ namespace openMVG
 
         // Init structure
         Landmarks &landmarks = tiny_scene.structure;
-        std::cout << "\n" << "##############################" << std::endl;
-        std::cout << "sfm_data_.structure size : " << sfm_data_.structure.size() << std::endl;
-        std::cout << "initial landmarks.size() : " << landmarks.size() << std::endl;
-        std::cout << "##############################" << std::endl;
+        // std::cout << "\n" << "##############################" << std::endl;
+        // std::cout << "sfm_data_.structure size : " << sfm_data_.structure.size() << std::endl;
+        // std::cout << "initial landmarks.size() : " << landmarks.size() << std::endl;
+        // std::cout << "##############################" << std::endl;
         for (const auto &track_iterator : map_tracksCommon)
         {
           // Get corresponding points
@@ -649,10 +649,10 @@ namespace openMVG
             landmarks[track_iterator.first].X = X;
           }
         }
-        std::cout << "\n" << "##############################" << std::endl;
-        std::cout << "sfm_data_.structure size : " << sfm_data_.structure.size() << std::endl;
-        std::cout << "after triangulate landmarks.size() : " << landmarks.size() << std::endl;
-        std::cout << "##############################" << std::endl;
+        // std::cout << "\n" << "##############################" << std::endl;
+        // std::cout << "sfm_data_.structure size : " << sfm_data_.structure.size() << std::endl;
+        // std::cout << "after triangulate landmarks.size() : " << landmarks.size() << std::endl;
+        // std::cout << "##############################" << std::endl;
 
         Save(tiny_scene, stlplus::create_filespec(sOut_directory_, "initialPair.ply"), ESfM_Data(ALL));
 

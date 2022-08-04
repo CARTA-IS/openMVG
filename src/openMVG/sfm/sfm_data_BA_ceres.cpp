@@ -333,12 +333,12 @@ namespace openMVG
 
           if (options.extrinsics_opt == Extrinsic_Parameter_Type::ADJUST_ALL)
           {
-            std::cout << "RS : Rotation & Translation" << std::endl;
+            std::cout << "Rolling Shutter : Rotation & Translation" << std::endl;
             vec_constant_extrinsic.insert(vec_constant_extrinsic.end(), {6, 7, 8});
           }
           else if (options.extrinsics_opt == Extrinsic_Parameter_Type::ADJUST_VELOCITY)
           {
-            std::cout << "RS : Velocity" << std::endl;
+            std::cout << "Rolling Shutter : Velocity" << std::endl;
             vec_constant_extrinsic.insert(vec_constant_extrinsic.end(), {0, 1, 2, 3, 4, 5});
           }
           
@@ -371,9 +371,7 @@ namespace openMVG
         }
         else
         {
-          std::cout << "\n" << "############################################################" << std::endl;
           std::cout << "Global Optimization" << std::endl;
-          std::cout << "############################################################" << std::endl;
 
           problem.AddParameterBlock(parameter_block, 6);
           std::vector<int> vec_constant_extrinsic;
@@ -647,16 +645,13 @@ namespace openMVG
               ceres::AngleAxisToRotationMatrix(&map_poses.at(indexPose)[0], R_refined.data());
               Vec3 t_refined(map_poses.at(indexPose)[3], map_poses.at(indexPose)[4], map_poses.at(indexPose)[5]);
               
-              if (options.use_velocity_optimization_opt)
+              if (foutput.is_open())
               {
-                if (foutput.is_open())
-                {
-                  foutput << map_poses.at(indexPose)[6] << " " << map_poses.at(indexPose)[7] << " " << map_poses.at(indexPose)[8] << "\n";
-                }
-                std::cout << "\n" << "################################################" << std::endl;
-                std::cout << "Velocity after BA : " << map_poses.at(indexPose)[6] << " " << map_poses.at(indexPose)[7] << " " << map_poses.at(indexPose)[8] << std::endl;
-                std::cout << "################################################" << std::endl;
+                foutput << map_poses.at(indexPose)[6] << " " << map_poses.at(indexPose)[7] << " " << map_poses.at(indexPose)[8] << "\n";
               }
+              std::cout << "\n" << "################################################" << std::endl;
+              std::cout << "Velocity after BA : " << map_poses.at(indexPose)[6] << " " << map_poses.at(indexPose)[7] << " " << map_poses.at(indexPose)[8] << std::endl;
+              std::cout << "################################################" << std::endl;
 
               // Update the pose
               Pose3 &pose = pose_it.second;
