@@ -320,6 +320,9 @@ namespace sfm {
     bool b_refine_intrinsic
   )
   {
+    std::cout << "\n" << "##############################" << std::endl;
+    std::cout << "RefinePose"<< std::endl;
+    std::cout << "##############################" << std::endl;
     if (!b_refine_pose && !b_refine_intrinsic)
     {
       // Nothing to do (There is no parameter to refine)
@@ -378,6 +381,9 @@ namespace sfm {
     bool b_refine_velocity_param
   )
   {
+    std::cout << "\n" << "##############################" << std::endl;
+    std::cout << "RefinePoseRolling"<< std::endl;
+    std::cout << "##############################" << std::endl;
     if (!b_refine_pose && !b_refine_intrinsic)
     {
       // Nothing to do (There is no parameter to refine)

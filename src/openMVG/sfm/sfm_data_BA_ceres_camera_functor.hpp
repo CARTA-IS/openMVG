@@ -561,6 +561,7 @@ struct ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2
     }
   }
 
+
   const double * m_pos_2dpoint; // The 2D observation
 };
 

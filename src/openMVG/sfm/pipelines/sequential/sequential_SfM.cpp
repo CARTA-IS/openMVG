@@ -133,9 +133,9 @@ namespace openMVG
         // Add images to the 3D reconstruction
         for (const auto &iter : vec_possible_resection_indexes)
         {
-          std::cout << "\n" << "##############################" << std::endl;
-          std::cout << "Start Resection"<< std::endl;
-          std::cout << "##############################" << std::endl;
+          // std::cout << "\n" << "##############################" << std::endl;
+          // std::cout << "Start Resection"<< std::endl;
+          // std::cout << "##############################" << std::endl;
           bImageAdded |= Resection(iter);
           set_remaining_view_id_.erase(iter);
         }
@@ -148,9 +148,6 @@ namespace openMVG
           Save(sfm_data_, stlplus::create_filespec(sOut_directory_, os.str(), ".ply"), ESfM_Data(ALL));
 
           // Perform BA until all point are under the given precision
-          std::cout << "\n" << "##############################" << std::endl;
-          std::cout << "Start BA for Rotation & Translation optimization"<< std::endl;
-          std::cout << "##############################" << std::endl;
           do
           {
             BundleAdjustment();
@@ -168,9 +165,6 @@ namespace openMVG
       // After BA finished, implement BA with velocity parameter
       if (this->b_use_rolling_shutter_)
       {
-        std::cout << "\n" << "##############################" << std::endl;
-        std::cout << "Start BA for Velocity optimization"<< std::endl;
-        std::cout << "##############################" << std::endl;
         bool velocity_param = true;
         do
         {
@@ -615,10 +609,12 @@ namespace openMVG
 
         // Init structure
         Landmarks &landmarks = tiny_scene.structure;
+
         // std::cout << "\n" << "##############################" << std::endl;
         // std::cout << "sfm_data_.structure size : " << sfm_data_.structure.size() << std::endl;
         // std::cout << "initial landmarks.size() : " << landmarks.size() << std::endl;
         // std::cout << "##############################" << std::endl;
+        
         for (const auto &track_iterator : map_tracksCommon)
         {
           // Get corresponding points
@@ -662,7 +658,7 @@ namespace openMVG
         Bundle_Adjustment_Ceres bundle_adjustment_obj(options);
         
         std::cout << "\n" << "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@" << std::endl;
-        std::cout << "Rolling Shutter Option before Adjust : " << this->b_use_rolling_shutter_ << std::endl;
+        std::cout << "Rolling Shutter Option before Tiny Adjust : " << this->b_use_rolling_shutter_ << std::endl;
         std::cout << "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@" << std::endl;
 
         if (!bundle_adjustment_obj.Adjust(tiny_scene,
@@ -678,10 +674,11 @@ namespace openMVG
         {
           return false;
         }
-        std::cout << "\n" << "##############################" << std::endl;
-        std::cout << "after tiny BA sfm_data_.structure size : " << sfm_data_.structure.size() << std::endl;
-        std::cout << "landmarks.size() : " << landmarks.size() << std::endl;
-        std::cout << "##############################" << std::endl;
+
+        // std::cout << "\n" << "##############################" << std::endl;
+        // std::cout << "after tiny BA sfm_data_.structure size : " << sfm_data_.structure.size() << std::endl;
+        // std::cout << "landmarks.size() : " << landmarks.size() << std::endl;
+        // std::cout << "##############################" << std::endl;
         
         // Save computed data
         const Pose3 pose_I = sfm_data_.poses[view_I->id_pose] = tiny_scene.poses[view_I->id_pose];
@@ -715,6 +712,7 @@ namespace openMVG
               pose_I, cam_I, pose_J, cam_J, ob_xI_ud, ob_xJ_ud);
           const Vec2 residual_I = cam_I->residual(pose_I(landmark.X), ob_xI.x);
           const Vec2 residual_J = cam_J->residual(pose_J(landmark.X), ob_xJ.x);
+
           // std::cout << "\n" << "##############################" << std::endl;
           // std::cout << "angle : " << angle << std::endl;
           // std::cout << "pose_I.rotation() : " << pose_I.rotation() << std::endl;
@@ -722,6 +720,7 @@ namespace openMVG
           // std::cout << "pose_J.rotation() : " << pose_J.rotation() << std::endl;
           // std::cout << "pose_J.center() : " << pose_J.center() << std::endl;
           // std::cout << "##############################" << std::endl;
+          
           if (angle > 2.0 &&
               CheiralityTest((*cam_I)(ob_xI_ud), pose_I,
                              (*cam_J)(ob_xJ_ud), pose_J,
@@ -733,12 +732,13 @@ namespace openMVG
             CheiralityTestCount = CheiralityTestCount + 1;
           }
         }
-        std::cout << "\n" << "##############################" << std::endl;
-        std::cout << "count trackId : " << trackCount << std::endl;
-        std::cout << "count CheiralityTest : " << CheiralityTestCount << std::endl;
-        std::cout << "landmarks.size() : " << landmarks.size() << std::endl;
-        std::cout << "sfm_data_.structure size : " << sfm_data_.structure.size() << std::endl;
-        std::cout << "##############################" << std::endl;
+        // std::cout << "\n" << "##############################" << std::endl;
+        // std::cout << "count trackId : " << trackCount << std::endl;
+        // std::cout << "count CheiralityTest : " << CheiralityTestCount << std::endl;
+        // std::cout << "landmarks.size() : " << landmarks.size() << std::endl;
+        // std::cout << "sfm_data_.structure size : " << sfm_data_.structure.size() << std::endl;
+        // std::cout << "##############################" << std::endl;
+
         // Save outlier residual information
         Histogram<double> histoResiduals;
         std::cout << "\n"
@@ -1157,9 +1157,9 @@ namespace openMVG
           }
         }
 
-        std::cout << "\n" << "##############################" << std::endl;
-        std::cout << "Finish RefinePose BA"<< std::endl;
-        std::cout << "##############################" << std::endl;
+        // std::cout << "\n" << "##############################" << std::endl;
+        // std::cout << "Finish RefinePose BA"<< std::endl;
+        // std::cout << "##############################" << std::endl;
 
         // E. Update the global scene with:
         // - the new found camera pose
