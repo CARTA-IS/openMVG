@@ -1319,9 +1319,7 @@ namespace openMVG
     /// Bundle adjustment to refine Structure; Motion and Intrinsics
     bool SequentialSfMReconstructionEngine::BundleAdjustment()
     {
-      std::cout << "\n" << "##############################" << std::endl;
-      std::cout << "Without Velocity BundleAdjustment"<< std::endl;
-      std::cout << "##############################" << std::endl;
+      std::cout << "\n" << "Without Velocity BundleAdjustment"<< std::endl;
       Bundle_Adjustment_Ceres::BA_Ceres_options options;
       if (sfm_data_.GetPoses().size() > 100 &&
           (ceres::IsSparseLinearAlgebraLibraryTypeAvailable(ceres::SUITE_SPARSE) ||
@@ -1352,9 +1350,7 @@ namespace openMVG
     /// Bundle adjustment to refine Structure; Velocities
     bool SequentialSfMReconstructionEngine::BundleAdjustment(bool velocity_param)
     {
-      std::cout << "\n" << "##############################" << std::endl;
-      std::cout << "With Velocity BundleAdjustment"<< std::endl;
-      std::cout << "##############################" << std::endl;
+      std::cout << "\n" << "With Velocity BundleAdjustment"<< std::endl;
       Bundle_Adjustment_Ceres::BA_Ceres_options options;
       if (sfm_data_.GetPoses().size() > 100 &&
           (ceres::IsSparseLinearAlgebraLibraryTypeAvailable(ceres::SUITE_SPARSE) ||
