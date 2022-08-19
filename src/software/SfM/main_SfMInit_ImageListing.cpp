@@ -145,8 +145,7 @@ int main(int argc, char **argv)
   std::string sPriorWeights;
   std::pair<bool, Vec3> prior_w_info(false, Vec3(1.0, 1.0, 1.0));
 
-  // int i_User_camera_model = PINHOLE_CAMERA_RADIAL3;
-  int i_User_camera_model = PINHOLE_CAMERA_BROWN;
+  int i_User_camera_model = PINHOLE_CAMERA_RADIAL3;
 
   bool b_Group_camera_model = true;
 
