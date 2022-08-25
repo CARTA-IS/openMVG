@@ -651,7 +651,7 @@ namespace openMVG
             std::ofstream foutput;
             std::string directory = options.output_directory;
             foutput.open(directory + "/velocity.txt", std::ios_base::app);
-
+            foutput << "##########################################################" << "\n";
             for (auto &pose_it : sfm_data.poses)
             {
               const IndexT indexPose = pose_it.first;
@@ -659,7 +659,8 @@ namespace openMVG
               Mat3 R_refined;
               ceres::AngleAxisToRotationMatrix(&map_poses.at(indexPose)[0], R_refined.data());
               Vec3 t_refined(map_poses.at(indexPose)[3], map_poses.at(indexPose)[4], map_poses.at(indexPose)[5]);
-              
+              Vec3 v_refined(map_poses.at(indexPose)[6], map_poses.at(indexPose)[7], map_poses.at(indexPose)[8]);
+
               if (foutput.is_open())
               {
                 foutput << map_poses.at(indexPose)[6] << " " << map_poses.at(indexPose)[7] << " " << map_poses.at(indexPose)[8] << "\n";
@@ -671,7 +672,11 @@ namespace openMVG
               // Update the pose
               Pose3 &pose = pose_it.second;
               pose = Pose3(R_refined, -R_refined.transpose() * t_refined);
+              // Update the velocity
+              TranslationVelocity &velocity = sfm_data.velocities[indexPose];
+              velocity = v_refined;
             }
+            foutput << "##########################################################" << "\n";
             foutput.close();
           }
           else

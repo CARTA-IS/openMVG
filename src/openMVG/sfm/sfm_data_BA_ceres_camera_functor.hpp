@@ -457,7 +457,8 @@ struct ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2_Rolling
     T* out_residuals) const
   {
     // Time delay between lines
-    double t = 0.03;
+    // double t = 0.03;
+    double t = 0.00001;
     
     // Apply velocity parameters
     Eigen::Map<const Eigen::Matrix<T, 3, 1>> cam_V((&cam_extrinsics[6]));
