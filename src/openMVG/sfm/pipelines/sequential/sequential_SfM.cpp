@@ -150,7 +150,7 @@ namespace openMVG
           // Perform BA until all point are under the given precision
           do
           {
-            BundleAdjustment();
+            BundleAdjustment(this->b_use_rolling_shutter_);
           } while (badTrackRejector(4.0, 50));
           eraseUnstablePosesAndObservations(sfm_data_);
         }
@@ -163,19 +163,19 @@ namespace openMVG
       }
 
       // After BA finished, implement BA with velocity parameter
-      if (this->b_use_rolling_shutter_)
-      {
-        bool velocity_param = true;
-        do
-        {
-          BundleAdjustment(velocity_param);
-        } while (badTrackRejector(4.0, 50));
+      // if (this->b_use_rolling_shutter_)
+      // {
+      //   bool velocity_param = true;
+      //   do
+      //   {
+      //     BundleAdjustment(velocity_param);
+      //   } while (badTrackRejector(4.0, 50));
         
-        if (badTrackRejector(4.0, 0))
-        {
-          eraseUnstablePosesAndObservations(sfm_data_);
-        }
-      }
+      //   if (badTrackRejector(4.0, 0))
+      //   {
+      //     eraseUnstablePosesAndObservations(sfm_data_);
+      //   }
+      // }
 
       //-- Reconstruction done.
       //-- Display some statistics
@@ -1141,7 +1141,7 @@ namespace openMVG
                   resection_data, b_refine_pose, b_refine_intrinsics,
                   this->b_use_motion_prior_,
                   this->b_use_rolling_shutter_,
-                  false
+                  true
           ))
           {
             return false;
@@ -1319,7 +1319,7 @@ namespace openMVG
     /// Bundle adjustment to refine Structure; Motion and Intrinsics
     bool SequentialSfMReconstructionEngine::BundleAdjustment()
     {
-      std::cout << "\n" << "Without Velocity BundleAdjustment"<< std::endl;
+      std::cout << "\n" << "Without Velocity Param BundleAdjustment"<< std::endl;
       Bundle_Adjustment_Ceres::BA_Ceres_options options;
       if (sfm_data_.GetPoses().size() > 100 &&
           (ceres::IsSparseLinearAlgebraLibraryTypeAvailable(ceres::SUITE_SPARSE) ||
@@ -1350,7 +1350,7 @@ namespace openMVG
     /// Bundle adjustment to refine Structure; Velocities
     bool SequentialSfMReconstructionEngine::BundleAdjustment(bool velocity_param)
     {
-      std::cout << "\n" << "With Velocity BundleAdjustment"<< std::endl;
+      std::cout << "\n" << "With Velocity Param BundleAdjustment"<< std::endl;
       Bundle_Adjustment_Ceres::BA_Ceres_options options;
       if (sfm_data_.GetPoses().size() > 100 &&
           (ceres::IsSparseLinearAlgebraLibraryTypeAvailable(ceres::SUITE_SPARSE) ||
@@ -1365,17 +1365,37 @@ namespace openMVG
       {
         options.linear_solver_type_ = ceres::DENSE_SCHUR;
       }
+
       Bundle_Adjustment_Ceres bundle_adjustment_obj(options);
-      const Optimize_Options ba_refine_options(ReconstructionEngine::intrinsic_refinement_options_,
-                                               Extrinsic_Parameter_Type::ADJUST_VELOCITY, // Adjust camera velocity
-                                               Structure_Parameter_Type::ADJUST_ALL, // Adjust scene structure
-                                               Control_Point_Parameter(),
-                                               this->b_use_motion_prior_,
-                                               this->b_use_rolling_shutter_,
-                                               velocity_param,
-                                               this->sOut_directory_
-                                               );
-      return bundle_adjustment_obj.Adjust(sfm_data_, ba_refine_options);
+
+      if (velocity_param)
+      {
+        const Optimize_Options ba_refine_options(ReconstructionEngine::intrinsic_refinement_options_,
+                                                Extrinsic_Parameter_Type::ADJUST_ROLLING, // Adjust camera extrinsic + velocity
+                                                Structure_Parameter_Type::ADJUST_ALL, // Adjust scene structure
+                                                Control_Point_Parameter(),
+                                                this->b_use_motion_prior_,
+                                                this->b_use_rolling_shutter_,
+                                                velocity_param,
+                                                this->sOut_directory_
+                                                );
+        return bundle_adjustment_obj.Adjust(sfm_data_, ba_refine_options);
+      }
+      else
+      {
+        const Optimize_Options ba_refine_options(ReconstructionEngine::intrinsic_refinement_options_,
+                                        Extrinsic_Parameter_Type::ADJUST_ALL, // Adjust camera extrinsics
+                                        Structure_Parameter_Type::ADJUST_ALL, // Adjust scene structure
+                                        Control_Point_Parameter(),
+                                        this->b_use_motion_prior_,
+                                        this->b_use_rolling_shutter_,
+                                        velocity_param,
+                                        this->sOut_directory_
+                                        );
+        return bundle_adjustment_obj.Adjust(sfm_data_, ba_refine_options);
+      }
+
+      // return bundle_adjustment_obj.Adjust(sfm_data_, ba_refine_options);
     }
 
     /**

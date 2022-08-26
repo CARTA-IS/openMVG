@@ -325,6 +325,12 @@ namespace openMVG
           std::vector<int> vec_constant_extrinsic;
           // std::cout << "Check vec_constant_extrinsic is empty " << vec_constant_extrinsic.empty() << std::endl;
 
+          // if (options.extrinsics_opt == Extrinsic_Parameter_Type::ADJUST_ROLLING)
+          // {
+          //   std::cout << "Inside Adjust() Rolling Shutter : Rotation & Translation & Velocity" << std::endl;
+          //   vec_constant_extrinsic.insert(vec_constant_extrinsic.end(), {6, 7, 8});
+          // }
+          
           if (options.extrinsics_opt == Extrinsic_Parameter_Type::ADJUST_ALL)
           {
             // std::cout << "Inside Adjust() Rolling Shutter : Rotation & Translation" << std::endl;
