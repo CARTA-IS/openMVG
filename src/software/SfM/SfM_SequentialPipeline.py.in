@@ -34,6 +34,7 @@ if len(sys.argv) < 3:
 input_dir = sys.argv[1]
 output_dir = sys.argv[2]
 matches_dir = os.path.join(output_dir, "matches")
+matched_file = os.path.join(matches_dir, "matches.f.bin")
 reconstruction_dir = os.path.join(output_dir, "reconstruction_sequential")
 camera_file_params = os.path.join(CAMERA_SENSOR_WIDTH_DIRECTORY, "sensor_width_camera_database.txt")
 
@@ -47,7 +48,7 @@ if not os.path.exists(matches_dir):
   os.mkdir(matches_dir)
 
 print ("1. Intrinsics analysis")
-pIntrisics = subprocess.Popen( [os.path.join(OPENMVG_SFM_BIN, "openMVG_main_SfMInit_ImageListing"),  "-i", input_dir, "-o", matches_dir, "-d", camera_file_params, "-c", "4", "-m", "1"] )
+pIntrisics = subprocess.Popen( [os.path.join(OPENMVG_SFM_BIN, "openMVG_main_SfMInit_ImageListing"), "P" ,"-i", input_dir, "-o", matches_dir, "-d", camera_file_params, "-c", "4", "-m", "1"] )
 pIntrisics.wait()
 
 print ("2. Compute features")
@@ -63,7 +64,7 @@ if not os.path.exists(reconstruction_dir):
     os.mkdir(reconstruction_dir)
 
 print ("4. Do Sequential/Incremental reconstruction")
-pRecons = subprocess.Popen( [os.path.join(OPENMVG_SFM_BIN, "openMVG_main_IncrementalSfM"),"-P",  "-i", matches_dir+"/sfm_data.json", "-m", matches_dir, "-o", reconstruction_dir,"-c","4"] )
+pRecons = subprocess.Popen( [os.path.join(OPENMVG_SFM_BIN, "openMVG_main_IncrementalSfM"),"-P",  "-i", matches_dir+"/sfm_data.json", "-m", matches_dir, "--matched_file" ,matched_file, "-o", reconstruction_dir,"-c","4"] )
 pRecons.wait()
 
 print ("5. Colorize Structure")

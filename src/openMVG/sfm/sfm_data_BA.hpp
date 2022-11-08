@@ -67,8 +67,6 @@ struct Optimize_Options
   Structure_Parameter_Type structure_opt;
   Control_Point_Parameter control_point_opt;
   bool use_motion_priors_opt;
-  bool use_rolling_shutter_opt;
-  bool use_velocity_optimization_opt;
   std::string output_directory;
 
   Optimize_Options
@@ -78,17 +76,13 @@ struct Optimize_Options
     const Structure_Parameter_Type structure = Structure_Parameter_Type::ADJUST_ALL,
     const Control_Point_Parameter & control_point = Control_Point_Parameter(0.0, false), // Default setting does not use GCP in the BA
     const bool use_motion_priors = false,
-    const bool use_rolling_shutter = false,
-    const bool use_velocity_optimization = false,
-    const std::string output_directory = "/home/dhlee"
+    const std::string output_directory = "~/"
   )
   :intrinsics_opt(intrinsics),
    extrinsics_opt(extrinsics),
    structure_opt(structure),
    control_point_opt(control_point),
    use_motion_priors_opt(use_motion_priors),
-   use_rolling_shutter_opt(use_rolling_shutter),
-   use_velocity_optimization_opt(use_velocity_optimization),
    output_directory(output_directory)
   {
   }

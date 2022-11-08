@@ -521,13 +521,17 @@ bool SequentialSfMReconstructionEngine2::BundleAdjustment()
     options.linear_solver_type_ = ceres::DENSE_SCHUR;
   }
   Bundle_Adjustment_Ceres bundle_adjustment_obj(options);
+  Extrinsic_Parameter_Type extrinsic_type;
+  if (b_use_rolling_shutter_)
+    extrinsic_type = Extrinsic_Parameter_Type::ADJUST_ROLLING;
+  else
+    extrinsic_type = Extrinsic_Parameter_Type::ADJUST_ALL;
   const Optimize_Options ba_refine_options
     ( ReconstructionEngine::intrinsic_refinement_options_,
-      Extrinsic_Parameter_Type::ADJUST_ALL, // Adjust camera motion
+      Extrinsic_Parameter_Type::ADJUST_ROLLING, // Adjust camera motion
       Structure_Parameter_Type::ADJUST_ALL, // Adjust scene structure
       Control_Point_Parameter(),
-      this->b_use_motion_prior_,
-      this->b_use_rolling_shutter_
+      this->b_use_motion_prior_
     );
   return bundle_adjustment_obj.Adjust(sfm_data_, ba_refine_options);
 }
