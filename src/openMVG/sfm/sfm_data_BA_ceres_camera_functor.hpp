@@ -592,11 +592,8 @@ namespace openMVG
       // the client code.
       static ceres::CostFunction *Create(
           const Vec2 &observation,
-          const double weight = 0.0,
-          bool rolling_shutter = false)
+          const double weight = 0.0)
       {
-        if (rolling_shutter)
-        {
           // std::cout << "Rolling Shutter Brown Model" << std::endl;
           if (weight == 0.0)
           {
@@ -607,20 +604,6 @@ namespace openMVG
           {
             return (new ceres::AutoDiffCostFunction<WeightedCostFunction<ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2_Rolling>, 2, 8, 9, 3>(new WeightedCostFunction<ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2_Rolling>(new ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2_Rolling(observation.data()), weight)));
           }
-        }
-        else
-        {
-          // std::cout << "Global Shutter Brown Model" << std::endl;
-          if (weight == 0.0)
-          {
-            return (new ceres::AutoDiffCostFunction<ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2, 2, 8, 6, 3>(
-                new ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2(observation.data())));
-          }
-          else
-          {
-            return (new ceres::AutoDiffCostFunction<WeightedCostFunction<ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2>, 2, 8, 6, 3>(new WeightedCostFunction<ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2>(new ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2(observation.data()), weight)));
-          }
-        }
       }
 
       const double *m_pos_2dpoint; // The 2D observation

@@ -82,8 +82,7 @@ namespace openMVG
     ceres::CostFunction *IntrinsicsToCostFunction(
         IntrinsicBase *intrinsic,
         const Vec2 &observation,
-        const double weight,
-        bool rolling_shutter
+        const double weight
         )
     {
       switch (intrinsic->getType())
@@ -95,7 +94,7 @@ namespace openMVG
       case PINHOLE_CAMERA_RADIAL3:
         return ResidualErrorFunctor_Pinhole_Intrinsic_Radial_K3::Create(observation, weight);
       case PINHOLE_CAMERA_BROWN:
-        return ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2::Create(observation, weight, rolling_shutter);
+        return ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2::Create(observation, weight);
       case PINHOLE_CAMERA_FISHEYE:
         return ResidualErrorFunctor_Pinhole_Intrinsic_Fisheye::Create(observation, weight);
       case CAMERA_SPHERICAL:
@@ -251,101 +250,55 @@ namespace openMVG
 
         double angleAxis[3];
         ceres::RotationMatrixToAngleAxis((const double *)R.data(), angleAxis);
-
-        if (options.use_rolling_shutter_opt)
+        // Add sfm_data velocity
+        const TranslationVelocity &velocity = sfm_data.velocities[indexPose];
+        const Vec3 v = velocity.velocity();
+        // angleAxis + translation + velocity
+        map_poses[indexPose] = {angleAxis[0], angleAxis[1], angleAxis[2], t(0), t(1), t(2), v(0), v(1), v(2)};
+        
+        double *parameter_block = &map_poses.at(indexPose)[0];
+        problem.AddParameterBlock(parameter_block, 9);
+        std::vector<int> vec_constant_extrinsic;
+        // std::cout << "Check vec_constant_extrinsic is empty " << vec_constant_extrinsic.empty() << std::endl;
+        // if (options.extrinsics_opt == Extrinsic_Parameter_Type::ADJUST_ROLLING)
+        // {
+        //   std::cout << "Inside Adjust() Rolling Shutter : Rotation & Translation & Velocity" << std::endl;
+        //   vec_constant_extrinsic.insert(vec_constant_extrinsic.end(), {6, 7, 8});
+        // }
+        
+        if (options.extrinsics_opt == Extrinsic_Parameter_Type::ADJUST_ALL)
         {
-          // Add sfm_data velocity
-          const TranslationVelocity &velocity = sfm_data.velocities[indexPose];
-          const Vec3 v = velocity.velocity();
-          // angleAxis + translation + velocity
-          map_poses[indexPose] = {angleAxis[0], angleAxis[1], angleAxis[2], t(0), t(1), t(2), v(0), v(1), v(2)};
-          
-          double *parameter_block = &map_poses.at(indexPose)[0];
-          problem.AddParameterBlock(parameter_block, 9);
-          std::vector<int> vec_constant_extrinsic;
-          // std::cout << "Check vec_constant_extrinsic is empty " << vec_constant_extrinsic.empty() << std::endl;
-
-          // if (options.extrinsics_opt == Extrinsic_Parameter_Type::ADJUST_ROLLING)
-          // {
-          //   std::cout << "Inside Adjust() Rolling Shutter : Rotation & Translation & Velocity" << std::endl;
-          //   vec_constant_extrinsic.insert(vec_constant_extrinsic.end(), {6, 7, 8});
-          // }
-          
-          if (options.extrinsics_opt == Extrinsic_Parameter_Type::ADJUST_ALL)
-          {
-            // std::cout << "Inside Adjust() Rolling Shutter : Rotation & Translation" << std::endl;
-            vec_constant_extrinsic.insert(vec_constant_extrinsic.end(), {6, 7, 8});
-          }
-          else if (options.extrinsics_opt == Extrinsic_Parameter_Type::ADJUST_VELOCITY)
-          {
-            std::cout << "Inside Adjust() Rolling Shutter : Velocity" << std::endl;
-            vec_constant_extrinsic.insert(vec_constant_extrinsic.end(), {0, 1, 2, 3, 4, 5});
-          }
-          
-          if (options.extrinsics_opt == Extrinsic_Parameter_Type::NONE)
-          {
-            // set the whole parameter block as constant for best performance
-            problem.SetParameterBlockConstant(parameter_block);
-          }
-          else
-          {
-            // If we adjust only the translation, we must set ROTATION as constant
-            if (options.extrinsics_opt == Extrinsic_Parameter_Type::ADJUST_TRANSLATION)
-            {
-              // Subset rotation and velocity parametrization
-              vec_constant_extrinsic.insert(vec_constant_extrinsic.end(), {0, 1, 2, 6, 7, 8});
-            }
-            // If we adjust only the rotation, we must set TRANSLATION as constant
-            if (options.extrinsics_opt == Extrinsic_Parameter_Type::ADJUST_ROTATION)
-            {
-              // Subset translation and velocity parametrization
-              vec_constant_extrinsic.insert(vec_constant_extrinsic.end(), {3, 4, 5, 6, 7, 8});
-            }
-            if (!vec_constant_extrinsic.empty())
-            {
-              ceres::SubsetParameterization *subset_parameterization =
-                  new ceres::SubsetParameterization(9, vec_constant_extrinsic);
-              problem.SetParameterization(parameter_block, subset_parameterization);
-            }
-          }
-
+          // std::cout << "Inside Adjust() Rolling Shutter : Rotation & Translation" << std::endl;
+          vec_constant_extrinsic.insert(vec_constant_extrinsic.end(), {6, 7, 8});
         }
-        else
+        else if (options.extrinsics_opt == Extrinsic_Parameter_Type::ADJUST_VELOCITY)
         {
-          // std::cout << "Inside Adjust() Global Shutter Optimization" << std::endl;
-          // angleAxis + translation
-          map_poses[indexPose] = {angleAxis[0], angleAxis[1], angleAxis[2], t(0), t(1), t(2)};
-
-          double *parameter_block = &map_poses.at(indexPose)[0];
-          problem.AddParameterBlock(parameter_block, 6);
-          std::vector<int> vec_constant_extrinsic;
-
-          if (options.extrinsics_opt == Extrinsic_Parameter_Type::NONE)
-          {
-            // set the whole parameter block as constant for best performance
-            problem.SetParameterBlockConstant(parameter_block);
-          }
-          else // Subset parametrization
-          {
-            // If we adjust only the translation, we must set ROTATION as constant
-            if (options.extrinsics_opt == Extrinsic_Parameter_Type::ADJUST_TRANSLATION)
-            {
-              // Subset rotation parametrization
-              vec_constant_extrinsic.insert(vec_constant_extrinsic.end(), {0, 1, 2});
-            }
-            // If we adjust only the rotation, we must set TRANSLATION as constant
-            if (options.extrinsics_opt == Extrinsic_Parameter_Type::ADJUST_ROTATION)
-            {
-              // Subset translation parametrization
-              vec_constant_extrinsic.insert(vec_constant_extrinsic.end(), {3, 4, 5});
-            }
-            if (!vec_constant_extrinsic.empty())
-            {
-              ceres::SubsetParameterization *subset_parameterization =
-                  new ceres::SubsetParameterization(6, vec_constant_extrinsic);
-              problem.SetParameterization(parameter_block, subset_parameterization);
-            }
-          }
+          std::cout << "Inside Adjust() Rolling Shutter : Velocity" << std::endl;
+          vec_constant_extrinsic.insert(vec_constant_extrinsic.end(), {0, 1, 2, 3, 4, 5});
+        }
+        
+        if (options.extrinsics_opt == Extrinsic_Parameter_Type::NONE)
+        {
+          // set the whole parameter block as constant for best performance
+          problem.SetParameterBlockConstant(parameter_block);
+        } 
+        // If we adjust only the translation, we must set ROTATION as constant
+        if (options.extrinsics_opt == Extrinsic_Parameter_Type::ADJUST_TRANSLATION)
+        {
+          // Subset rotation and velocity parametrization
+          vec_constant_extrinsic.insert(vec_constant_extrinsic.end(), {0, 1, 2, 6, 7, 8});
+        }
+        // If we adjust only the rotation, we must set TRANSLATION as constant
+        if (options.extrinsics_opt == Extrinsic_Parameter_Type::ADJUST_ROTATION)
+        {
+          // Subset translation and velocity parametrization
+          vec_constant_extrinsic.insert(vec_constant_extrinsic.end(), {3, 4, 5, 6, 7, 8});
+        }
+        if (!vec_constant_extrinsic.empty())
+        {
+          ceres::SubsetParameterization *subset_parameterization =
+              new ceres::SubsetParameterization(9, vec_constant_extrinsic);
+          problem.SetParameterization(parameter_block, subset_parameterization);
         }
       }
 
@@ -409,8 +362,7 @@ namespace openMVG
           ceres::CostFunction *cost_function =
               IntrinsicsToCostFunction(sfm_data.intrinsics.at(view->id_intrinsic).get(),
                                        obs_it.second.x,
-                                       0.0,
-                                       options.use_rolling_shutter_opt);
+                                       0.0);
 
           // Whether K exists or not
           if (cost_function)
@@ -464,8 +416,7 @@ namespace openMVG
                 IntrinsicsToCostFunction(
                     sfm_data.intrinsics.at(view->id_intrinsic).get(),
                     obs_it.second.x,
-                    options.control_point_opt.weight,
-                    options.use_rolling_shutter_opt);
+                    options.control_point_opt.weight);
             
             if (cost_function)
             {
@@ -509,31 +460,14 @@ namespace openMVG
           const sfm::ViewPriors *prior = dynamic_cast<sfm::ViewPriors *>(view_it.second.get());
           if (prior != nullptr && prior->b_use_pose_center_ && sfm_data.IsPoseAndIntrinsicDefined(prior))
           {
-            if (options.use_rolling_shutter_opt)
-            {
-              ceres::CostFunction *cost_function =
-                  new ceres::AutoDiffCostFunction<PoseCenterConstraintCostFunction, 3, 9>(
-                      new PoseCenterConstraintCostFunction(prior->pose_center_, prior->center_weight_));
-
-              problem.AddResidualBlock(
-                cost_function,
-                new ceres::HuberLoss(
-                    Square(pose_center_robust_fitting_error)),
-                &map_poses.at(prior->id_view)[0]);
-            }
-            else
-            {
-              // Add the cost functor (distance from Pose prior to the SfM_Data Pose center)
-              ceres::CostFunction *cost_function =
-                  new ceres::AutoDiffCostFunction<PoseCenterConstraintCostFunction, 3, 6>(
-                      new PoseCenterConstraintCostFunction(prior->pose_center_, prior->center_weight_));
-
-              problem.AddResidualBlock(
-                cost_function,
-                new ceres::HuberLoss(
-                    Square(pose_center_robust_fitting_error)),
-                &map_poses.at(prior->id_view)[0]);
-            }
+            ceres::CostFunction *cost_function =
+                new ceres::AutoDiffCostFunction<PoseCenterConstraintCostFunction, 3, 9>(
+                    new PoseCenterConstraintCostFunction(prior->pose_center_, prior->center_weight_));
+            problem.AddResidualBlock(
+              cost_function,
+              new ceres::HuberLoss(
+                  Square(pose_center_robust_fitting_error)),
+              &map_poses.at(prior->id_view)[0]); 
           }
         }
       }
