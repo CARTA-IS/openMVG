@@ -46,25 +46,25 @@ if not os.path.exists(output_dir):
   os.mkdir(output_dir)
 if not os.path.exists(matches_dir):
   os.mkdir(matches_dir)
-
-print ("1. Intrinsics analysis")
-pIntrisics = subprocess.Popen( [os.path.join(OPENMVG_SFM_BIN, "openMVG_main_SfMInit_ImageListing"), "P" ,"-i", input_dir, "-o", matches_dir, "-d", camera_file_params, "-c", "4", "-m", "1"] )
-pIntrisics.wait()
-
-print ("2. Compute features")
-pFeatures = subprocess.Popen( [os.path.join(OPENMVG_SFM_BIN, "openMVG_main_ComputeFeatures"),  "-i", matches_dir+"/sfm_data.json", "-o", matches_dir, "-m", "SIFT_ANATOMY"] )
-pFeatures.wait()
-
-print ("3. Compute matches")
-pMatches = subprocess.Popen( [os.path.join(OPENMVG_SFM_BIN, "openMVG_main_ComputeMatches"),  "-i", matches_dir+"/sfm_data.json", "-o", matches_dir,"-g","f",] )
-pMatches.wait()
+if not os.path.exists(matched_file):
+  print ("1. Intrinsics analysis")
+  pIntrisics = subprocess.Popen( [os.path.join(OPENMVG_SFM_BIN, "openMVG_main_SfMInit_ImageListing"), "P" ,"-i", input_dir, "-o", matches_dir, "-d", camera_file_params, "-c", "4", "-m", "1"] )
+  pIntrisics.wait()
+  
+  print ("2. Compute features")
+  pFeatures = subprocess.Popen( [os.path.join(OPENMVG_SFM_BIN, "openMVG_main_ComputeFeatures"),  "-i", matches_dir+"/sfm_data.json", "-o", matches_dir, "-m", "SIFT_ANATOMY"] )
+  pFeatures.wait()
+  
+  print ("3. Compute matches")
+  pMatches = subprocess.Popen( [os.path.join(OPENMVG_SFM_BIN, "openMVG_main_ComputeMatches"),  "-i", matches_dir+"/sfm_data.json", "-o", matches_dir,"-g","f",] )
+  pMatches.wait()
 
 # Create the reconstruction if not present
 if not os.path.exists(reconstruction_dir):
     os.mkdir(reconstruction_dir)
 
 print ("4. Do Sequential/Incremental reconstruction")
-pRecons = subprocess.Popen( [os.path.join(OPENMVG_SFM_BIN, "openMVG_main_IncrementalSfM"),"-P",  "-i", matches_dir+"/sfm_data.json", "-m", matches_dir, "--matched_file" ,matched_file, "-o", reconstruction_dir,"-c","4"] )
+pRecons = subprocess.Popen( [os.path.join(OPENMVG_SFM_BIN, "openMVG_main_IncrementalSfM"),"-P",  "-i", matches_dir+"/sfm_data.json", "-m", matches_dir, "--match_file" ,matched_file, "-o", reconstruction_dir,"-c","4"] )
 pRecons.wait()
 
 print ("5. Colorize Structure")
