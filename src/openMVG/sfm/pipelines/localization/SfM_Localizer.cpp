@@ -376,9 +376,7 @@ namespace sfm {
     Image_Localizer_Match_Data & matching_data,
     bool b_refine_pose,
     bool b_refine_intrinsic,
-    bool b_refine_motion_prior,
-    bool b_refine_rolling_shutter,
-    bool b_refine_velocity_param
+    bool b_refine_rolling_shutter
   )
   {
     std::cout << "\n" << "##############################" << std::endl;
@@ -416,9 +414,7 @@ namespace sfm {
       (b_refine_pose) ? Extrinsic_Parameter_Type::ADJUST_ROLLING : Extrinsic_Parameter_Type::NONE,
       Structure_Parameter_Type::NONE, // STRUCTURE must remain constant
       Control_Point_Parameter(),
-      b_refine_motion_prior,
-      b_refine_rolling_shutter,
-      b_refine_velocity_param
+      b_refine_rolling_shutter
     );
     Bundle_Adjustment_Ceres bundle_adjustment_obj;
     const bool b_BA_Status = bundle_adjustment_obj.Adjust(

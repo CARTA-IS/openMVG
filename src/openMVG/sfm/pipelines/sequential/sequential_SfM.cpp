@@ -133,9 +133,9 @@ namespace openMVG
         // Add images to the 3D reconstruction
         for (const auto &iter : vec_possible_resection_indexes)
         {
-          // std::cout << "\n" << "##############################" << std::endl;
-          // std::cout << "Start Resection"<< std::endl;
-          // std::cout << "##############################" << std::endl;
+          std::cout << "\n" << "##############################" << std::endl;
+          std::cout << "Start Resection"<< std::endl;
+          std::cout << "##############################" << std::endl;
           bImageAdded |= Resection(iter);
           set_remaining_view_id_.erase(iter);
         }
@@ -150,7 +150,7 @@ namespace openMVG
           // Perform BA until all point are under the given precision
           do
           {
-            BundleAdjustment(this->b_use_rolling_shutter_);
+            BundleAdjustment();
           } while (badTrackRejector(4.0, 50));
           eraseUnstablePosesAndObservations(sfm_data_);
         }
@@ -162,20 +162,6 @@ namespace openMVG
         eraseUnstablePosesAndObservations(sfm_data_);
       }
 
-      // After BA finished, implement BA with velocity parameter
-      // if (this->b_use_rolling_shutter_)
-      // {
-      //   bool velocity_param = true;
-      //   do
-      //   {
-      //     BundleAdjustment(velocity_param);
-      //   } while (badTrackRejector(4.0, 50));
-        
-      //   if (badTrackRejector(4.0, 0))
-      //   {
-      //     eraseUnstablePosesAndObservations(sfm_data_);
-      //   }
-      // }
 
       //-- Reconstruction done.
       //-- Display some statistics
@@ -665,12 +651,12 @@ namespace openMVG
                                           Optimize_Options(
                                               Intrinsic_Parameter_Type::NONE,       // Keep intrinsic constant
                                               Extrinsic_Parameter_Type::ADJUST_ALL, // Adjust camera motion
-                                              Structure_Parameter_Type::ADJUST_ALL,
-                                              Control_Point_Parameter(),
-                                              this->b_use_motion_prior_,
-                                              this->b_use_rolling_shutter_,
-                                              this->b_use_velocity_optimization_) // Adjust structure
-                                          ))
+                                              Structure_Parameter_Type::ADJUST_ALL//,
+                                              //Control_Point_Parameter(),
+                                              //this->b_use_motion_prior_,
+                                              //this->b_use_rolling_shutter_,
+                                              //this->b_use_velocity_optimization_ // Adjust structure
+                                          )))
         {
           return false;
         }
@@ -1134,28 +1120,26 @@ namespace openMVG
         const bool b_refine_pose = true;
         const bool b_refine_intrinsics = false;
         
-        if (this->b_use_rolling_shutter_)
-        {
-          if (!sfm::SfM_Localizer::RefinePoseRolling(
-                  optional_intrinsic.get(), pose,
-                  resection_data, b_refine_pose, b_refine_intrinsics,
-                  this->b_use_motion_prior_,
-                  this->b_use_rolling_shutter_,
-                  true
-          ))
-          {
-            return false;
-          }
-        }
-        else
-        {
+        //if (this->b_use_rolling_shutter_)
+        //{
+        //  if (!sfm::SfM_Localizer::RefinePoseRolling(
+        //          optional_intrinsic.get(), pose,
+        //          resection_data, b_refine_pose, b_refine_intrinsics,
+        //          this->b_use_rolling_shutter_
+        //  ))
+        //  {
+        //    return false;
+        //  }
+        //}
+        //else
+        //{
           if (!sfm::SfM_Localizer::RefinePose(
                   optional_intrinsic.get(), pose,
                   resection_data, b_refine_pose, b_refine_intrinsics))
           {
             return false;
           }
-        }
+        //}
 
         // std::cout << "\n" << "##############################" << std::endl;
         // std::cout << "Finish RefinePose BA"<< std::endl;
@@ -1319,7 +1303,6 @@ namespace openMVG
     /// Bundle adjustment to refine Structure; Motion and Intrinsics
     bool SequentialSfMReconstructionEngine::BundleAdjustment()
     {
-      std::cout << "\n" << "Without Velocity Param BundleAdjustment"<< std::endl;
       Bundle_Adjustment_Ceres::BA_Ceres_options options;
       if (sfm_data_.GetPoses().size() > 100 &&
           (ceres::IsSparseLinearAlgebraLibraryTypeAvailable(ceres::SUITE_SPARSE) ||
@@ -1335,67 +1318,19 @@ namespace openMVG
         options.linear_solver_type_ = ceres::DENSE_SCHUR;
       }
       Bundle_Adjustment_Ceres bundle_adjustment_obj(options);
+      Extrinsic_Parameter_Type extrinsic_model;
+      if (this->b_use_rolling_shutter_)
+        extrinsic_model = Extrinsic_Parameter_Type::ADJUST_ROLLING;
+      else
+        extrinsic_model = Extrinsic_Parameter_Type::ADJUST_ALL;
+
       const Optimize_Options ba_refine_options(ReconstructionEngine::intrinsic_refinement_options_,
-                                               Extrinsic_Parameter_Type::ADJUST_ALL, // Adjust camera motion
+                                               extrinsic_model, // Adjust camera motion
                                                Structure_Parameter_Type::ADJUST_ALL, // Adjust scene structure
                                                Control_Point_Parameter(),
-                                               this->b_use_motion_prior_,
-                                               this->b_use_rolling_shutter_,
-                                               this->b_use_velocity_optimization_,
-                                               this->sOut_directory_
+                                               this->b_use_motion_prior_
                                                );
       return bundle_adjustment_obj.Adjust(sfm_data_, ba_refine_options);
-    }
-
-    /// Bundle adjustment to refine Structure; Velocities
-    bool SequentialSfMReconstructionEngine::BundleAdjustment(bool velocity_param)
-    {
-      std::cout << "\n" << "With Velocity Param BundleAdjustment"<< std::endl;
-      Bundle_Adjustment_Ceres::BA_Ceres_options options;
-      if (sfm_data_.GetPoses().size() > 100 &&
-          (ceres::IsSparseLinearAlgebraLibraryTypeAvailable(ceres::SUITE_SPARSE) ||
-           ceres::IsSparseLinearAlgebraLibraryTypeAvailable(ceres::CX_SPARSE) ||
-           ceres::IsSparseLinearAlgebraLibraryTypeAvailable(ceres::EIGEN_SPARSE)))
-      // Enable sparse BA only if a sparse lib is available and if there more than 100 poses
-      {
-        options.preconditioner_type_ = ceres::JACOBI;
-        options.linear_solver_type_ = ceres::SPARSE_SCHUR;
-      }
-      else
-      {
-        options.linear_solver_type_ = ceres::DENSE_SCHUR;
-      }
-
-      Bundle_Adjustment_Ceres bundle_adjustment_obj(options);
-
-      if (velocity_param)
-      {
-        const Optimize_Options ba_refine_options(ReconstructionEngine::intrinsic_refinement_options_,
-                                                Extrinsic_Parameter_Type::ADJUST_ROLLING, // Adjust camera extrinsic + velocity
-                                                Structure_Parameter_Type::ADJUST_ALL, // Adjust scene structure
-                                                Control_Point_Parameter(),
-                                                this->b_use_motion_prior_,
-                                                this->b_use_rolling_shutter_,
-                                                velocity_param,
-                                                this->sOut_directory_
-                                                );
-        return bundle_adjustment_obj.Adjust(sfm_data_, ba_refine_options);
-      }
-      else
-      {
-        const Optimize_Options ba_refine_options(ReconstructionEngine::intrinsic_refinement_options_,
-                                        Extrinsic_Parameter_Type::ADJUST_ALL, // Adjust camera extrinsics
-                                        Structure_Parameter_Type::ADJUST_ALL, // Adjust scene structure
-                                        Control_Point_Parameter(),
-                                        this->b_use_motion_prior_,
-                                        this->b_use_rolling_shutter_,
-                                        velocity_param,
-                                        this->sOut_directory_
-                                        );
-        return bundle_adjustment_obj.Adjust(sfm_data_, ba_refine_options);
-      }
-
-      // return bundle_adjustment_obj.Adjust(sfm_data_, ba_refine_options);
     }
 
     /**
