@@ -150,7 +150,7 @@ namespace openMVG
           // Perform BA until all point are under the given precision
           do
           {
-            BundleAdjustment();
+            BundleAdjustment(this->b_use_rolling_shutter_);
           } while (badTrackRejector(4.0, 50));
           eraseUnstablePosesAndObservations(sfm_data_);
         }

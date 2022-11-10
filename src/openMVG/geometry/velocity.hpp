@@ -19,7 +19,7 @@ class TranslationVelocity
 {
   protected:
     /// Vector of translation velocity
-    Vec3 velocity_;
+    Vec3 velocity_=Vec3::Zero();
   
   public:
     /**
