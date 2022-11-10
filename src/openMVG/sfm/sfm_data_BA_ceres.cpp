@@ -526,7 +526,7 @@ namespace openMVG
         // Update camera poses with refined data
         if (options.extrinsics_opt != Extrinsic_Parameter_Type::NONE)
         {
-          if (options.extrinsics_opt != Extrinsic_Parameter_Type::ADJUST_ROLLING)
+          if (options.extrinsics_opt == Extrinsic_Parameter_Type::ADJUST_ROLLING)
           {
             std::ofstream foutput;
             std::string directory = options.output_directory;

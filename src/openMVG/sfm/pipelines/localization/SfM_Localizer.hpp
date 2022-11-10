@@ -120,8 +120,7 @@ public:
     geometry::Pose3 & pose,
     Image_Localizer_Match_Data & matching_data,
     bool b_refine_pose,
-    bool b_refine_intrinsic,
-    bool b_refine_rolling_shutter
+    bool b_refine_intrinsic
   );
 };
 
