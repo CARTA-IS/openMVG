@@ -64,7 +64,7 @@ if not os.path.exists(reconstruction_dir):
     os.mkdir(reconstruction_dir)
 
 print ("4. Do Sequential/Incremental reconstruction")
-pRecons = subprocess.Popen( [os.path.join(OPENMVG_SFM_BIN, "openMVG_main_IncrementalSfM"),"-P",  "-i", matches_dir+"/sfm_data.json", "-m", matches_dir, "--match_file" ,matched_file, "-o", reconstruction_dir,"-c","4"] )
+pRecons = subprocess.Popen( [os.path.join(OPENMVG_SFM_BIN, "openMVG_main_IncrementalSfM"),"-P",  "-i", matches_dir+"/sfm_data.json", "-m", matches_dir, "--match_file" ,matched_file, "-o", reconstruction_dir,"-c","4", "-R"] )
 pRecons.wait()
 
 print ("5. Colorize Structure")

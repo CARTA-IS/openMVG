@@ -268,7 +268,7 @@ namespace openMVG
         
         if (options.extrinsics_opt == Extrinsic_Parameter_Type::ADJUST_ALL)
         {
-          // std::cout << "Inside Adjust() Rolling Shutter : Rotation & Translation" << std::endl;
+          std::cout << "Inside Adjust() Rolling Shutter : Rotation & Translation" << std::endl;
           vec_constant_extrinsic.insert(vec_constant_extrinsic.end(), {6, 7, 8});
         }
         else if (options.extrinsics_opt == Extrinsic_Parameter_Type::ADJUST_VELOCITY)
@@ -571,6 +571,9 @@ namespace openMVG
               // Update the pose
               Pose3 &pose = pose_it.second;
               pose = Pose3(R_refined, -R_refined.transpose() * t_refined);
+              std::cout << "\n" << "##########################################################" << std::endl;
+              std::cout << "Velocity after BA : " << map_poses.at(indexPose)[6] << " " << map_poses.at(indexPose)[7] << " " << map_poses.at(indexPose)[8] << std::endl;
+              std::cout << "##########################################################" << std::endl;
             }
           }
         }

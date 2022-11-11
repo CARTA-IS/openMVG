@@ -454,8 +454,14 @@ namespace openMVG
         ceres::AngleAxisRotatePoint(cam_R, pos_3dpoint, transformed_point.data());
 
         // Apply the camera translation
-        transformed_point += cam_t + cam_delta_t;
+        transformed_point += (cam_t + cam_delta_t);
 
+        //for (int  i=0; i < 9;i++) 
+        //{
+        //  std::cout << cam_extrinsics[i]<<", ";
+        //  if (i%3 == 2)
+        //    std::cout << std::endl;  
+        //}
         // Transform the point from homogeneous to euclidean (undistorted point)
         const Eigen::Matrix<T, 2, 1> projected_point = transformed_point.hnormalized();
 
