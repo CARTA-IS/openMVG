@@ -253,6 +253,8 @@ int main(int argc, char **argv)
   std::cout << "Output directory : " << dir << std::endl;
   std::cout << "##############################" << std::endl;
   
+
+
   // Handle Initial pair parameter
   if (!initialPairString.first.empty() && !initialPairString.second.empty())
   {

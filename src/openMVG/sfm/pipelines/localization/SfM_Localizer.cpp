@@ -373,6 +373,7 @@ namespace sfm {
   (
     cameras::IntrinsicBase * intrinsics,
     geometry::Pose3 & pose,
+    geometry::TranslationVelocity & vel,
     Image_Localizer_Match_Data & matching_data,
     bool b_refine_pose,
     bool b_refine_intrinsic
@@ -393,6 +394,7 @@ namespace sfm {
     sfm_data.views.insert({0, std::make_shared<View>("",0, 0, 0)});
     // pose
     sfm_data.poses[0] = pose;
+    sfm_data.velocities[0] = vel;
     // intrinsic
     std::shared_ptr<cameras::IntrinsicBase> shared_intrinsics(intrinsics->clone());
     sfm_data.intrinsics[0] = shared_intrinsics;
@@ -410,7 +412,7 @@ namespace sfm {
     const Optimize_Options ba_refine_options
     (
       (b_refine_intrinsic) ? cameras::Intrinsic_Parameter_Type::ADJUST_ALL : cameras::Intrinsic_Parameter_Type::NONE,
-      (b_refine_pose) ? Extrinsic_Parameter_Type::ADJUST_ROLLING : Extrinsic_Parameter_Type::NONE,
+      (b_refine_pose) ? Extrinsic_Parameter_Type::ADJUST_ALL : Extrinsic_Parameter_Type::NONE,
       Structure_Parameter_Type::NONE, // STRUCTURE must remain constant
       Control_Point_Parameter()
     );
@@ -421,6 +423,7 @@ namespace sfm {
     if (b_BA_Status)
     {
       pose = sfm_data.poses[0];
+      vel = sfm_data.velocities[0];
       if (b_refine_intrinsic)
         intrinsics->updateFromParams(shared_intrinsics->getParams());
     }

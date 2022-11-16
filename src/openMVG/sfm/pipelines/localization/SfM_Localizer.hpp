@@ -19,6 +19,7 @@
 namespace openMVG { namespace cameras { struct IntrinsicBase; } }
 namespace openMVG { namespace features { class Regions; } }
 namespace openMVG { namespace geometry { class Pose3; } }
+namespace openMVG { namespace geometry { class TranslationVelocity; } }
 namespace openMVG { namespace sfm { struct Regions_Provider; } }
 namespace openMVG { namespace sfm { struct SfM_Data; } }
 
@@ -118,6 +119,7 @@ public:
   (
     cameras::IntrinsicBase * intrinsics,
     geometry::Pose3 & pose,
+    geometry::TranslationVelocity & vel,
     Image_Localizer_Match_Data & matching_data,
     bool b_refine_pose,
     bool b_refine_intrinsic

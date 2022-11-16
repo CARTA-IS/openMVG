@@ -116,6 +116,9 @@ namespace openMVG
       }
       // Else a starting pair was already initialized before
 
+        std::cout << "extrinsics : " << sfm_data_.GetPoses().size() << std::endl;
+        std::cout << "velocities : " << sfm_data_.GetVelocities().size() << std::endl;
+        std::cout << "##############################" << std::endl;
       // Initial pair Essential Matrix and [R|t] estimation.
       if (!MakeInitialPair3D(initial_pair_))
       {
@@ -127,6 +130,10 @@ namespace openMVG
       // - group of images will be selected and resection + scene completion will be tried
       size_t resectionGroupIndex = 0;
       std::vector<uint32_t> vec_possible_resection_indexes;
+
+        std::cout << "extrinsics : " << sfm_data_.GetPoses().size() << std::endl;
+        std::cout << "velocities : " << sfm_data_.GetVelocities().size() << std::endl;
+        std::cout << "##############################" << std::endl;
       while (FindImagesWithPossibleResection(vec_possible_resection_indexes))
       {
         bool bImageAdded = false;
@@ -669,6 +676,9 @@ namespace openMVG
         // Save computed data
         const Pose3 pose_I = sfm_data_.poses[view_I->id_pose] = tiny_scene.poses[view_I->id_pose];
         const Pose3 pose_J = sfm_data_.poses[view_J->id_pose] = tiny_scene.poses[view_J->id_pose];
+        sfm_data_.velocities[view_I->id_pose] =TranslationVelocity(Vec3::Zero());
+        sfm_data_.velocities[view_J->id_pose] =TranslationVelocity(Vec3::Zero());
+        
         map_ACThreshold_.insert({I, relativePose_info.found_residual_precision});
         map_ACThreshold_.insert({J, relativePose_info.found_residual_precision});
         set_remaining_view_id_.erase(view_I->id_view);
@@ -1035,6 +1045,7 @@ namespace openMVG
                 << "-- Robust Resection of view: " << viewIndex << std::endl;
 
       geometry::Pose3 pose;
+
       const bool bResection = sfm::SfM_Localizer::Localize(
           optional_intrinsic ? resection_method_ : resection::SolverType::DLT_6POINTS,
           {view_I->ui_width, view_I->ui_height},
@@ -1119,28 +1130,26 @@ namespace openMVG
         }
         const bool b_refine_pose = true;
         const bool b_refine_intrinsics = false;
+        geometry::TranslationVelocity vel;
         
-        //if (this->b_use_rolling_shutter_)
-        //{
-        //  if (!sfm::SfM_Localizer::RefinePoseRolling(
-        //          optional_intrinsic.get(), pose,
-        //          resection_data, b_refine_pose, b_refine_intrinsics,
-        //          this->b_use_rolling_shutter_
-        //  ))
-        //  {
-        //    return false;
-        //  }
-        //}
-        //else
-        //{
+        if (this->b_use_rolling_shutter_)
+        {
+          if (!sfm::SfM_Localizer::RefinePoseRolling(
+                  optional_intrinsic.get(), pose, vel,
+                  resection_data, b_refine_pose, b_refine_intrinsics))
+          {
+            return false;
+          }
+        }
+        else
+        {
           if (!sfm::SfM_Localizer::RefinePose(
                   optional_intrinsic.get(), pose,
                   resection_data, b_refine_pose, b_refine_intrinsics))
           {
             return false;
           }
-        //}
-
+        }
         // std::cout << "\n" << "##############################" << std::endl;
         // std::cout << "Finish RefinePose BA"<< std::endl;
         // std::cout << "##############################" << std::endl;
@@ -1148,6 +1157,7 @@ namespace openMVG
         // E. Update the global scene with:
         // - the new found camera pose
         sfm_data_.poses[view_I->id_pose] = pose;
+        sfm_data_.velocities[view_I->id_pose] = vel;
         // - track the view's AContrario robust estimation found threshold
         map_ACThreshold_.insert({viewIndex, resection_data.error_max});
         // - intrinsic parameters (if the view has no intrinsic group add a new one)
@@ -1179,6 +1189,12 @@ namespace openMVG
         const View *view_I = sfm_data_.GetViews().at(I).get();
         const IntrinsicBase *cam_I = sfm_data_.GetIntrinsics().at(view_I->id_intrinsic).get();
         const Pose3 pose_I = sfm_data_.GetPoseOrDie(view_I);
+        
+        std::cout << "id pose :" << view_I->id_pose << std::endl;
+        std::cout << "ext size : "  << sfm_data_.GetPoses().size() << std::endl;
+        std::cout << "velocities size : " << sfm_data_.GetVelocities().size() << std::endl;
+        
+        const TranslationVelocity vel_I = sfm_data_.GetVelocities().at(view_I->id_pose);
 
         // Vector of all already reconstructed views
         const std::set<IndexT> valid_views = Get_Valid_Views(sfm_data_);
@@ -1220,6 +1236,7 @@ namespace openMVG
                   const View *view_J = sfm_data_.GetViews().at(J).get();
                   const IntrinsicBase *cam_J = sfm_data_.GetIntrinsics().at(view_J->id_intrinsic).get();
                   const Pose3 pose_J = sfm_data_.GetPoseOrDie(view_J);
+                  const TranslationVelocity vel_J = sfm_data_.GetVelocities().at(view_J->id_pose);
                   const Vec2 xJ = features_provider_->feats_per_view.at(J)[allViews_of_track.at(J)].coords().cast<double>();
 
                   // Position of the point in view I

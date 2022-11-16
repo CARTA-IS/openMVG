@@ -432,14 +432,14 @@ namespace openMVG
           T *out_residuals) const
       {
         // Time delay between lines
-        // double t = 0.03;
+        // double t = 0.00001;
         //for T(ceres::Jet) operation
-        const T &t = T(0.00001);
+        const T &t = T(0.03 / 3648);
         const T &observation_y = T(m_pos_2dpoint[1]);
         // Apply velocity parameters
         Eigen::Map<const Eigen::Matrix<T, 3, 1>> cam_V((&cam_extrinsics[6]));
-        Eigen::Matrix<T, 3, 1> cam_delta_t = cam_V;
-        cam_delta_t = observation_y * t * cam_delta_t;
+        Eigen::Matrix<T, 3, 1> cam_delta_c = cam_V;
+        cam_delta_c = observation_y * t * cam_delta_c;
 
         //--
         // Apply external parameters (Pose)
@@ -449,12 +449,16 @@ namespace openMVG
         Eigen::Map<const Eigen::Matrix<T, 3, 1>> cam_t(&cam_extrinsics[3]);
 
         Eigen::Matrix<T, 3, 1> transformed_point;
+        Eigen::Matrix<T, 3, 1> cam_delta_t;
 
+        //C=-R.transpose() * T
+        //-R * deltaC = delta T.
         // Rotate the point according the camera rotation
         ceres::AngleAxisRotatePoint(cam_R, pos_3dpoint, transformed_point.data());
+        ceres::AngleAxisRotatePoint(cam_R, cam_delta_c.data(), cam_delta_t.data());
 
         // Apply the camera translation
-        transformed_point += (cam_t + cam_delta_t);
+        transformed_point += (cam_t - cam_delta_t);
 
         //for (int  i=0; i < 9;i++) 
         //{
