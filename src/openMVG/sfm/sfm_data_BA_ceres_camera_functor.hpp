@@ -481,7 +481,6 @@ namespace openMVG
         const T &k3 = cam_intrinsics[OFFSET_DISTO_K3];
         const T &t1 = cam_intrinsics[OFFSET_DISTO_T1];
         const T &t2 = cam_intrinsics[OFFSET_DISTO_T2];
-
         // Apply distortion (xd,yd) = disto(x_u,y_u)
         const T x_u = projected_point.x();
         const T y_u = projected_point.y();

@@ -412,7 +412,7 @@ namespace sfm {
     const Optimize_Options ba_refine_options
     (
       (b_refine_intrinsic) ? cameras::Intrinsic_Parameter_Type::ADJUST_ALL : cameras::Intrinsic_Parameter_Type::NONE,
-      (b_refine_pose) ? Extrinsic_Parameter_Type::ADJUST_ALL : Extrinsic_Parameter_Type::NONE,
+      (b_refine_pose) ? Extrinsic_Parameter_Type::ADJUST_ROLLING : Extrinsic_Parameter_Type::NONE,
       Structure_Parameter_Type::NONE, // STRUCTURE must remain constant
       Control_Point_Parameter()
     );

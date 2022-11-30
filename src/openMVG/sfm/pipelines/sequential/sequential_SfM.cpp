@@ -1241,6 +1241,8 @@ namespace openMVG
 
                   // Position of the point in view I
                   const Vec2 xI = features_provider_->feats_per_view.at(I)[track.at(I)].coords().cast<double>();
+                  
+                 
 
                   // Try to triangulate a 3D point from J view
                   // A new 3D point must be added
@@ -1249,13 +1251,17 @@ namespace openMVG
                       xI_ud = cam_I->get_ud_pixel(xI),
                       xJ_ud = cam_J->get_ud_pixel(xJ);
                   Vec3 X = Vec3::Zero();
+                   //Rolling shutter Translation
+                  openMVG::Vec3 rs_translation_I = pose_I.translation() - pose_I.rotation() * ((0.03/3648) * xI_ud[1] * vel_I.velocity()); 
+                  openMVG::Vec3 rs_translation_J = pose_J.translation() - pose_J.rotation() * ((0.03/3648) * xJ_ud[1] * vel_J.velocity()); 
+                  ////////////
 
                   if (Triangulate2View(
                           pose_I.rotation(),
-                          pose_I.translation(),
+                          rs_translation_I,
                           (*cam_I)(xI_ud),
                           pose_J.rotation(),
-                          pose_J.translation(),
+                          rs_translation_J,
                           (*cam_J)(xJ_ud),
                           X,
                           triangulation_method_))
@@ -1263,8 +1269,12 @@ namespace openMVG
                     // Check triangulation result
                     const double angle = AngleBetweenRay(
                         pose_I, cam_I, pose_J, cam_J, xI_ud, xJ_ud);
-                    const Vec2 residual_I = cam_I->residual(pose_I(X), xI);
-                    const Vec2 residual_J = cam_J->residual(pose_J(X), xJ);
+                    ///Rolling shutter Projection
+                    openMVG::Vec3 normx_I = pose_I.rotation() * X + rs_translation_I;
+                    openMVG::Vec3 normx_J = pose_J.rotation() * X + rs_translation_J;
+                    /////
+                    const Vec2 residual_I = cam_I->residual(normx_I, xI);
+                    const Vec2 residual_J = cam_J->residual(normx_J, xJ);
                     if (
                         //  - Check angle (small angle leads to imprecise triangulation)
                         angle > 2.0 &&
@@ -1334,11 +1344,13 @@ namespace openMVG
       {
         options.linear_solver_type_ = ceres::DENSE_SCHUR;
       }
+      options.preconditioner_type_ = ceres::JACOBI;
+      options.linear_solver_type_=ceres::SPARSE_SCHUR;
       Bundle_Adjustment_Ceres bundle_adjustment_obj(options);
       Extrinsic_Parameter_Type extrinsic_model;
-      if (this->b_use_rolling_shutter_)
-        extrinsic_model = Extrinsic_Parameter_Type::ADJUST_ROLLING;
-      else
+      //if (this->b_use_rolling_shutter_)
+      //  extrinsic_model = Extrinsic_Parameter_Type::ADJUST_ROLLING;
+      //else
         extrinsic_model = Extrinsic_Parameter_Type::ADJUST_ALL;
 
       const Optimize_Options ba_refine_options(ReconstructionEngine::intrinsic_refinement_options_,
