@@ -166,6 +166,7 @@ namespace openMVG
       // Ensure there is no remaining outliers
       if (badTrackRejector(4.0, 0))
       {
+        BundleAdjustment();
         eraseUnstablePosesAndObservations(sfm_data_);
       }
 
@@ -1314,8 +1315,12 @@ namespace openMVG
               const Pose3 pose_J = sfm_data_.GetPoseOrDie(view_J);
               const Vec2 xJ = features_provider_->feats_per_view.at(J)[allViews_of_track.at(J)].coords().cast<double>();
               const Vec2 xJ_ud = cam_J->get_ud_pixel(xJ);
-
-              const Vec2 residual = cam_J->residual(pose_J(landmark.X), xJ);
+              ///Rolling shutter Projection
+              const TranslationVelocity vel_J = sfm_data_.GetVelocities().at(view_J->id_pose);   
+              openMVG::Vec3 rs_translation_J = pose_J.translation() - pose_J.rotation() * ((0.03/(view_J->ui_height)) * xJ_ud[1] * vel_J.velocity()); 
+              openMVG::Vec3 normx_J = pose_J.rotation() * landmark.X + rs_translation_J;
+              /////
+              const Vec2 residual = cam_J->residual( normx_J, xJ);//pose_J(landmark.X), xJ);
               if (CheiralityTest((*cam_J)(xJ_ud), pose_J, landmark.X) && residual.norm() < std::max(4.0, map_ACThreshold_.at(J)))
               {
                 landmark.obs[J] = Observation(xJ, allViews_of_track.at(J));
@@ -1328,7 +1333,7 @@ namespace openMVG
     }
 
     /// Bundle adjustment to refine Structure; Motion and Intrinsics
-    bool SequentialSfMReconstructionEngine::BundleAdjustment()
+    bool SequentialSfMReconstructionEngine::BundleAdjustment(bool b_rs=false)
     {
       Bundle_Adjustment_Ceres::BA_Ceres_options options;
       if (sfm_data_.GetPoses().size() > 100 &&
@@ -1348,16 +1353,17 @@ namespace openMVG
       options.linear_solver_type_=ceres::SPARSE_SCHUR;
       Bundle_Adjustment_Ceres bundle_adjustment_obj(options);
       Extrinsic_Parameter_Type extrinsic_model;
-      //if (this->b_use_rolling_shutter_)
-      //  extrinsic_model = Extrinsic_Parameter_Type::ADJUST_ROLLING;
-      //else
+      if (b_rs)
+        extrinsic_model = Extrinsic_Parameter_Type::ADJUST_ROLLING;
+      else
         extrinsic_model = Extrinsic_Parameter_Type::ADJUST_ALL;
 
       const Optimize_Options ba_refine_options(ReconstructionEngine::intrinsic_refinement_options_,
                                                extrinsic_model, // Adjust camera motion
                                                Structure_Parameter_Type::ADJUST_ALL, // Adjust scene structure
                                                Control_Point_Parameter(),
-                                               this->b_use_motion_prior_
+                                               this->b_use_motion_prior_,
+                                               this->sOut_directqory_
                                                );
       return bundle_adjustment_obj.Adjust(sfm_data_, ba_refine_options);
     }

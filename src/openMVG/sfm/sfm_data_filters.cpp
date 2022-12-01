@@ -54,7 +54,12 @@ IndexT RemoveOutliers_PixelResidualError
       const View * view = sfm_data.views.at(itObs->first).get();
       const geometry::Pose3 pose = sfm_data.GetPoseOrDie(view);
       const cameras::IntrinsicBase * intrinsic = sfm_data.intrinsics.at(view->id_intrinsic).get();
-      const Vec2 residual = intrinsic->residual(pose(iterTracks->second.X), itObs->second.x);
+      ///Rolling shutter Projection
+      const TranslationVelocity vel = sfm_data.GetVelocities().at(view->id_pose);           
+      openMVG::Vec3 rs_translation = pose.translation() - pose.rotation() * ((0.03/(view->ui_height)) * (itObs->second.x[1]) * vel.velocity()); 
+      openMVG::Vec3 normx = pose.rotation() * (iterTracks->second.X) + rs_translation;
+      /////
+      const Vec2 residual = intrinsic->residual(normx, itObs->second.x) ;//pose(iterTracks->second.X), itObs->second.x);
       if (residual.norm() > dThresholdPixel)
       {
         ++outlier_count;

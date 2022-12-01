@@ -33,6 +33,12 @@ void ApplySimilarity
   {
     iterPose.second = sim(iterPose.second);
   }
+  for (auto & iterVel : sfm_data.velocities)
+  {
+    iterVel.second.velocity() = sim.scale_ * sim.pose_.rotation() * iterVel.second.velocity();
+    std::cout << "transform" << std::endl;
+  }
+
 
   if (transform_priors)
   {
