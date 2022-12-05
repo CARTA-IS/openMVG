@@ -163,10 +163,10 @@ namespace openMVG
         }
         ++resectionGroupIndex;
       }
+      BundleAdjustment(b_use_rolling_shutter_);
       // Ensure there is no remaining outliers
       if (badTrackRejector(4.0, 0))
       {
-        BundleAdjustment();
         eraseUnstablePosesAndObservations(sfm_data_);
       }
 
@@ -814,7 +814,12 @@ namespace openMVG
           const View *view = sfm_data_.GetViews().find(observation.first)->second.get();
           const Pose3 pose = sfm_data_.GetPoseOrDie(view);
           const auto intrinsic = sfm_data_.GetIntrinsics().find(view->id_intrinsic)->second;
-          const Vec2 residual = intrinsic->residual(pose(landmark_entry.second.X), observation.second.x);
+          ///Rolling shutter Projection
+          const TranslationVelocity vel = sfm_data_.GetVelocities().at(view->id_pose);   
+          openMVG::Vec3 rs_translation = pose.translation() - pose.rotation() * ((0.03/(view->ui_height)) * observation.second.x[1] * vel.velocity()); 
+          openMVG::Vec3 normx = pose.rotation() * landmark_entry.second.X + rs_translation;
+          /////
+          const Vec2 residual = intrinsic->residual(normx , observation.second.x);///pose(landmark_entry.second.X), observation.second.x);
           vec_residuals.emplace_back(std::abs(residual(0)));
           vec_residuals.emplace_back(std::abs(residual(1)));
         }
@@ -1333,7 +1338,7 @@ namespace openMVG
     }
 
     /// Bundle adjustment to refine Structure; Motion and Intrinsics
-    bool SequentialSfMReconstructionEngine::BundleAdjustment(bool b_rs=false)
+    bool SequentialSfMReconstructionEngine::BundleAdjustment(bool b_rs)
     {
       Bundle_Adjustment_Ceres::BA_Ceres_options options;
       if (sfm_data_.GetPoses().size() > 100 &&
@@ -1353,8 +1358,10 @@ namespace openMVG
       options.linear_solver_type_=ceres::SPARSE_SCHUR;
       Bundle_Adjustment_Ceres bundle_adjustment_obj(options);
       Extrinsic_Parameter_Type extrinsic_model;
-      if (b_rs)
+      if (b_rs){
+        std::cout<<"RSBA on!!!!" <<std::endl;
         extrinsic_model = Extrinsic_Parameter_Type::ADJUST_ROLLING;
+      }
       else
         extrinsic_model = Extrinsic_Parameter_Type::ADJUST_ALL;
 
@@ -1363,7 +1370,7 @@ namespace openMVG
                                                Structure_Parameter_Type::ADJUST_ALL, // Adjust scene structure
                                                Control_Point_Parameter(),
                                                this->b_use_motion_prior_,
-                                               this->sOut_directqory_
+                                               this->sOut_directory_
                                                );
       return bundle_adjustment_obj.Adjust(sfm_data_, ba_refine_options);
     }
