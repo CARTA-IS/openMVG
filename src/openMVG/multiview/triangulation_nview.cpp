@@ -49,6 +49,7 @@ bool TriangulateNViewAlgebraic
   for (Mat3X::Index i = 0; i < points.cols(); ++i)
   {
     const Vec3 point_norm = points.col(i).normalized();
+    //poses[i].col(3) = rs_ts[i]; // Rolling shutter translation change
     const Mat34 cost =
         poses[i] -
         point_norm * point_norm.transpose() * poses[i];

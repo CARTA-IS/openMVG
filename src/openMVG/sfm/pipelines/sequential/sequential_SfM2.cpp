@@ -185,7 +185,7 @@ bool SequentialSfMReconstructionEngine2::Process() {
   //--
   //- 3. Final bundle Adjustment
   //--
-  BundleAdjustment();
+  BundleAdjustment(b_use_rolling_shutter_);
 
   //-- Reconstruction done.
   //-- Display some statistics
@@ -464,35 +464,70 @@ bool SequentialSfMReconstructionEngine2::AddingMissingView
           }
           const bool b_refine_pose = true;
           const bool b_refine_intrinsics = false;
-          if (intrinsic && sfm::SfM_Localizer::RefinePose(
-              intrinsic.get(), pose,
+          geometry::TranslationVelocity vel;
+          if (this->b_use_rolling_shutter_){
+            if (intrinsic && sfm::SfM_Localizer::RefinePoseRolling(
+              intrinsic.get(), pose, vel,
               resection_data, b_refine_pose, b_refine_intrinsics))
-          {
-            // - intrinsic parameters (if the view has no intrinsic group add a new one)
-            if (sfm_data_.intrinsics.count(sfm_data_.views.at(view_id)->id_intrinsic) == 0)
             {
-              // Since the view have not yet an intrinsic group before, create a new one
-              IndexT new_intrinsic_id = 0;
-              if (!sfm_data_.GetIntrinsics().empty())
+              // - intrinsic parameters (if the view has no intrinsic group add a new one)
+              if (sfm_data_.intrinsics.count(sfm_data_.views.at(view_id)->id_intrinsic) == 0)
               {
-                // Since some intrinsic Id already exists,
-                //  we have to create a new unique identifier following the existing one
-                std::set<IndexT> existing_intrinsic_id;
-                  std::transform(sfm_data_.GetIntrinsics().cbegin(), sfm_data_.GetIntrinsics().cend(),
-                  std::inserter(existing_intrinsic_id, existing_intrinsic_id.begin()),
-                  stl::RetrieveKey());
-                new_intrinsic_id = (*existing_intrinsic_id.rbegin()) + 1;
+                // Since the view have not yet an intrinsic group before, create a new one
+                IndexT new_intrinsic_id = 0;
+                if (!sfm_data_.GetIntrinsics().empty())
+                {
+                  // Since some intrinsic Id already exists,
+                  //  we have to create a new unique identifier following the existing one
+                  std::set<IndexT> existing_intrinsic_id;
+                    std::transform(sfm_data_.GetIntrinsics().cbegin(), sfm_data_.GetIntrinsics().cend(),
+                    std::inserter(existing_intrinsic_id, existing_intrinsic_id.begin()),
+                    stl::RetrieveKey());
+                  new_intrinsic_id = (*existing_intrinsic_id.rbegin()) + 1;
+                }
+                #pragma omp critical
+                {
+                  sfm_data_.views.at(view_id)->id_intrinsic = new_intrinsic_id;
+                  sfm_data_.intrinsics[new_intrinsic_id] = intrinsic;
+                }
               }
-              #pragma omp critical
-              {
-                sfm_data_.views.at(view_id)->id_intrinsic = new_intrinsic_id;
-                sfm_data_.intrinsics[new_intrinsic_id] = intrinsic;
-              }
-            }
 
-            // Update the found camera pose
-            #pragma omp critical
-            sfm_data_.poses[view->id_pose] = pose;
+              // Update the found camera pose
+              #pragma omp critical
+              sfm_data_.poses[view->id_pose] = pose;
+            }
+          }
+          else{
+            if (intrinsic && sfm::SfM_Localizer::RefinePose(
+                intrinsic.get(), pose,
+                resection_data, b_refine_pose, b_refine_intrinsics))
+            {
+              // - intrinsic parameters (if the view has no intrinsic group add a new one)
+              if (sfm_data_.intrinsics.count(sfm_data_.views.at(view_id)->id_intrinsic) == 0)
+              {
+                // Since the view have not yet an intrinsic group before, create a new one
+                IndexT new_intrinsic_id = 0;
+                if (!sfm_data_.GetIntrinsics().empty())
+                {
+                  // Since some intrinsic Id already exists,
+                  //  we have to create a new unique identifier following the existing one
+                  std::set<IndexT> existing_intrinsic_id;
+                    std::transform(sfm_data_.GetIntrinsics().cbegin(), sfm_data_.GetIntrinsics().cend(),
+                    std::inserter(existing_intrinsic_id, existing_intrinsic_id.begin()),
+                    stl::RetrieveKey());
+                  new_intrinsic_id = (*existing_intrinsic_id.rbegin()) + 1;
+                }
+                #pragma omp critical
+                {
+                  sfm_data_.views.at(view_id)->id_intrinsic = new_intrinsic_id;
+                  sfm_data_.intrinsics[new_intrinsic_id] = intrinsic;
+                }
+              }
+
+              // Update the found camera pose
+              #pragma omp critical
+              sfm_data_.poses[view->id_pose] = pose;
+            }
           }
         }
       }
@@ -503,7 +538,7 @@ bool SequentialSfMReconstructionEngine2::AddingMissingView
   return (pose_after != pose_before);
 }
 
-bool SequentialSfMReconstructionEngine2::BundleAdjustment()
+bool SequentialSfMReconstructionEngine2::BundleAdjustment(bool b_rs)
 {
   Bundle_Adjustment_Ceres::BA_Ceres_options options;
   if ( sfm_data_.GetPoses().size() > 100 &&
@@ -520,18 +555,26 @@ bool SequentialSfMReconstructionEngine2::BundleAdjustment()
   {
     options.linear_solver_type_ = ceres::DENSE_SCHUR;
   }
+  //Rolling Shutter
+  options.preconditioner_type_ = ceres::JACOBI;
+  options.linear_solver_type_=ceres::SPARSE_SCHUR;
+
   Bundle_Adjustment_Ceres bundle_adjustment_obj(options);
-  Extrinsic_Parameter_Type extrinsic_type;
-  if (b_use_rolling_shutter_)
-    extrinsic_type = Extrinsic_Parameter_Type::ADJUST_ROLLING;
+  Extrinsic_Parameter_Type extrinsic_model;
+  if (b_rs){
+    std::cout<<"RSBA on!!!!" <<std::endl;
+    extrinsic_model = Extrinsic_Parameter_Type::ADJUST_ROLLING;
+  }
   else
-    extrinsic_type = Extrinsic_Parameter_Type::ADJUST_ALL;
+    extrinsic_model = Extrinsic_Parameter_Type::ADJUST_ALL;
+
   const Optimize_Options ba_refine_options
     ( ReconstructionEngine::intrinsic_refinement_options_,
-      extrinsic_type, // Adjust camera motion
+      extrinsic_model, // Adjust camera motion
       Structure_Parameter_Type::ADJUST_ALL, // Adjust scene structure
       Control_Point_Parameter(),
-      this->b_use_motion_prior_
+      this->b_use_motion_prior_,
+      this->sOut_directory_
     );
   return bundle_adjustment_obj.Adjust(sfm_data_, ba_refine_options);
 }
