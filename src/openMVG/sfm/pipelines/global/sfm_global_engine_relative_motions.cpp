@@ -414,8 +414,11 @@ bool GlobalSfMReconstructionEngine_RelativeMotions::Compute_Initial_Structure
 bool GlobalSfMReconstructionEngine_RelativeMotions::Adjust()
 {
   // Refine sfm_scene (in a 3 iteration process (free the parameters regarding their incertainty order)):
-
-  Bundle_Adjustment_Ceres bundle_adjustment_obj;
+  //Rolling shutter
+  Bundle_Adjustment_Ceres::BA_Ceres_options options;
+  options.preconditioner_type_ = ceres::JACOBI;
+  options.linear_solver_type_=ceres::SPARSE_SCHUR;
+  Bundle_Adjustment_Ceres bundle_adjustment_obj(options);
   // - refine only Structure and translations
   bool b_BA_Status = bundle_adjustment_obj.Adjust
     (

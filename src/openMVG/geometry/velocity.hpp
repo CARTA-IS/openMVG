@@ -51,6 +51,12 @@ class TranslationVelocity
       return velocity_;
     }
 
+    void SetVelocity(Vec3 input)
+    {
+      velocity_ = input;
+      return;
+    }
+
 
 };
 } // namespace geometry

@@ -288,7 +288,11 @@ configure_file(${OPENMVG_TUTORIAL_IN_FILE}
 set(OPENMVG_TUTORIAL_IN_FILE "${CMAKE_CURRENT_LIST_DIR}/SfM_SequentialPipeline.py.in")
 configure_file(${OPENMVG_TUTORIAL_IN_FILE}
     "${CMAKE_CURRENT_BINARY_DIR}/SfM_SequentialPipeline.py" @ONLY)
-
+set(OPENMVG_TUTORIAL_IN_FILE "${CMAKE_CURRENT_LIST_DIR}/SfM_CustomPipeline.py.in")
+    configure_file(${OPENMVG_TUTORIAL_IN_FILE}
+        "${CMAKE_CURRENT_BINARY_DIR}/SfM_CustomPipeline.py" @ONLY)
+    
+    
 add_subdirectory(clustering)
 add_subdirectory(export)
 add_subdirectory(import)

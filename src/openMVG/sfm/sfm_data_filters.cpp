@@ -55,7 +55,15 @@ IndexT RemoveOutliers_PixelResidualError
       const geometry::Pose3 pose = sfm_data.GetPoseOrDie(view);
       const cameras::IntrinsicBase * intrinsic = sfm_data.intrinsics.at(view->id_intrinsic).get();
       ///Rolling shutter Projection
-      const TranslationVelocity vel = sfm_data.GetVelocities().at(view->id_pose);           
+      TranslationVelocity vel;
+      try
+      {
+        vel.SetVelocity(sfm_data.GetVelocities().at(view->id_pose).velocity());
+      }
+      catch (std::out_of_range& e)
+      {
+        ;//std::cout << view->id_pose <<" pose id is not exist!" << std::endl;
+      }      
       openMVG::Vec3 rs_translation = pose.translation() - pose.rotation() * ((0.03/(view->ui_height)) * (itObs->second.x[1]) * vel.velocity()); 
       openMVG::Vec3 normx = pose.rotation() * (iterTracks->second.X) + rs_translation;
       /////

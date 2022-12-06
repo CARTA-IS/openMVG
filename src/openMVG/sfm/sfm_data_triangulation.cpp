@@ -70,21 +70,30 @@ bool track_triangulation
       const IntrinsicBase * cam = sfm_data.GetIntrinsics().at(view->id_intrinsic).get();
       const Pose3 pose = sfm_data.GetPoseOrDie(view);
       //Rolling Shutter
-      const TranslationVelocity vel = sfm_data.GetVelocities().at(view->id_pose);
+      TranslationVelocity vel;
+      try
+      {
+        vel.SetVelocity(sfm_data.GetVelocities().at(view->id_pose).velocity());
+      }
+      catch (std::out_of_range& e)
+      {
+        ;//std::cout << view->id_pose <<" pose id is not exist!" << std::endl;
+      }
       const Vec2 x_ud = cam->get_ud_pixel(observation.second.x);
       openMVG::Vec3 rs_translation = pose.translation()- pose.rotation()* ((0.03/ view->ui_height)* (x_ud[1]) * vel.velocity());
-      
+      Mat34 poseMat = pose.asMatrix(); 
+      //std::cout <<"test " << std::endl;
+      //std::cout <<"pose " << poseMat <<std::endl;
+      //std::cout <<"rs_translation " << rs_translation <<std::endl;
+      poseMat.col(3) = rs_translation; // Rolling shutter translation change
+      //std::cout << "pose " << poseMat << std::endl;
+
       bearing.emplace_back((*cam)(cam->get_ud_pixel(observation.second.x)));
-      poses.emplace_back(pose.asMatrix());
+      poses.emplace_back(poseMat);
       rs_ts.emplace_back(rs_translation);
       //velocities.emplace_back(vel);
       poses_.emplace_back(pose);
-      Mat34 poseMat = pose.asMatrix(); 
-      std::cout <<"test " << std::endl;
-      std::cout <<"pose " << poseMat <<std::endl;
-      std::cout <<"rs_translation " << rs_translation <<std::endl;
-      poseMat.col(3) = rs_translation; // Rolling shutter translation change
-      std::cout << "pose " << poseMat << std::endl;
+      
     }
     if (bearing.size() > 2)
     {
@@ -144,7 +153,16 @@ bool track_check_predicate
     visibility = true; // at least an observation is evaluated
     const IntrinsicBase * cam = sfm_data.intrinsics.at(view->id_intrinsic).get();
     const Pose3 pose = sfm_data.GetPoseOrDie(view);
-    const TranslationVelocity vel = sfm_data.GetVelocities().at(view->id_pose);
+    //Rolling Shutter
+    TranslationVelocity vel;
+    try
+    {
+      vel.SetVelocity(sfm_data.GetVelocities().at(view->id_pose).velocity());
+    }
+    catch (std::out_of_range& e)
+    {
+      ;//std::cout << view->id_pose <<" pose id is not exist!" << std::endl;
+    }
     if (!predicate(*cam, pose, obs_it.second.x, X, vel))
       return false;
   }
@@ -428,8 +446,16 @@ const
       const Pose3 pose = sfm_data.GetPoseOrDie(view);
       if (!CheiralityTest(cam(obs_it.second.x), pose, X))
         continue;
-      //Rolling Shutter 
-      const TranslationVelocity vel = sfm_data.GetVelocities().at(view->id_pose);
+      //Rolling Shutter
+      TranslationVelocity vel;
+      try
+      {
+        vel.SetVelocity(sfm_data.GetVelocities().at(view->id_pose).velocity());
+      }
+      catch (std::out_of_range& e)
+      {
+        ;//std::cout << view->id_pose <<" pose id is not exist!" << std::endl;
+      }
       openMVG::Vec3 rs_translation = pose.translation() - pose.rotation() * ((0.03/(view->ui_height)) * (obs_it.second.x[1]) * vel.velocity()); 
       openMVG::Vec3 normx = pose.rotation() * X + rs_translation;
               
