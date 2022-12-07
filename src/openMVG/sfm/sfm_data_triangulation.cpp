@@ -80,7 +80,7 @@ bool track_triangulation
         ;//std::cout << view->id_pose <<" pose id is not exist!" << std::endl;
       }
       const Vec2 x_ud = cam->get_ud_pixel(observation.second.x);
-      openMVG::Vec3 rs_translation = pose.translation()- pose.rotation()* ((0.03/ view->ui_height)* (x_ud[1]) * vel.velocity());
+      openMVG::Vec3 rs_translation = pose.translation()- pose.rotation()* ((cam->t()/ ( view->ui_height))* (x_ud[1]) * vel.velocity());
       Mat34 poseMat = pose.asMatrix(); 
       //std::cout <<"test " << std::endl;
       //std::cout <<"pose " << poseMat <<std::endl;
@@ -198,7 +198,7 @@ struct ResidualAndCheiralityPredicate
   )
   {
     //Rolling Shutter
-    openMVG::Vec3 rs_translation = pose.translation() - pose.rotation() * ((0.03/(cam.h())) * x[1] * vel.velocity()); 
+    openMVG::Vec3 rs_translation = pose.translation() - pose.rotation() * ((cam.t()/(cam.h())) * x[1] * vel.velocity()); 
     openMVG::Vec3 normx = pose.rotation() * X + rs_translation;
               
     const Vec2 residual = cam.residual(normx ,x);// pose(X), x);
@@ -456,7 +456,7 @@ const
       {
         ;//std::cout << view->id_pose <<" pose id is not exist!" << std::endl;
       }
-      openMVG::Vec3 rs_translation = pose.translation() - pose.rotation() * ((0.03/(view->ui_height)) * (obs_it.second.x[1]) * vel.velocity()); 
+      openMVG::Vec3 rs_translation = pose.translation() - pose.rotation() * ((cam.t()/(view->ui_height)) * (obs_it.second.x[1]) * vel.velocity()); 
       openMVG::Vec3 normx = pose.rotation() * X + rs_translation;
               
 

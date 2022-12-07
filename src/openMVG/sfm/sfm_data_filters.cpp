@@ -64,7 +64,7 @@ IndexT RemoveOutliers_PixelResidualError
       {
         ;//std::cout << view->id_pose <<" pose id is not exist!" << std::endl;
       }      
-      openMVG::Vec3 rs_translation = pose.translation() - pose.rotation() * ((0.03/(view->ui_height)) * (itObs->second.x[1]) * vel.velocity()); 
+      openMVG::Vec3 rs_translation = pose.translation() - pose.rotation() * ((intrinsic->t()/(view->ui_height)) * (itObs->second.x[1]) * vel.velocity()); 
       openMVG::Vec3 normx = pose.rotation() * (iterTracks->second.X) + rs_translation;
       /////
       const Vec2 residual = intrinsic->residual(normx, itObs->second.x) ;//pose(iterTracks->second.X), itObs->second.x);

@@ -39,19 +39,21 @@ struct IntrinsicBase : public Clonable<IntrinsicBase>
   unsigned int w_;
   /// Height of image
   unsigned int h_;
+  /// readout time of image (default : 30ms)
+  double t_;
 
   /**
   * @brief Constructor
   * @param w Width of the image
   * @param h Height of the image
   */
-  IntrinsicBase( unsigned int w = 0, unsigned int h = 0 )
+  IntrinsicBase( unsigned int w = 0, unsigned int h = 0, double t = 0.03)
     : w_( w ),
-      h_( h )
+      h_( h ),
+      t_( t )
   {
 
   }
-
   /**
   * @brief Destructor
   */
@@ -73,6 +75,15 @@ struct IntrinsicBase : public Clonable<IntrinsicBase>
   unsigned int h() const
   {
     return h_;
+  }
+  
+  /**
+  * @brief Get readout time of the image
+  * @return readout time of the image
+  */
+  double t() const
+  {
+    return t_;
   }
 
   /**

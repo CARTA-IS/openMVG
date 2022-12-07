@@ -39,6 +39,7 @@ class Pinhole_Intrinsic_Brown_T2_Rolling : public Pinhole_Intrinsic
     * @brief Constructor
     * @param w Width of image
     * @param h Height of image
+    * @param t readout time
     * @param focal Focal distance (in pixel)
     * @param ppx Principal point on X-axis
     * @param ppy Principal point on Y-axis
@@ -49,22 +50,22 @@ class Pinhole_Intrinsic_Brown_T2_Rolling : public Pinhole_Intrinsic
     * @param t2 Second tangential distortion coefficient
     */
     Pinhole_Intrinsic_Brown_T2_Rolling(
-      int w = 0, int h = 0,
+      int w = 0, int h = 0, double t = 0.03,
       double focal = 0.0, double ppx = 0, double ppy = 0,
       double k1 = 0.0, double k2 = 0.0, double k3 = 0.0,
-      double t1 = 0.0, double t2 = 0.0 )
-      : Pinhole_Intrinsic( w, h, focal, ppx, ppy ),
+      double t1 = 0.0, double t2 = 0.0)
+      : Pinhole_Intrinsic( w, h, t, focal, ppx, ppy),
         params_({k1, k2, k3, t1, t2})
     {
     }
 
     /**
     * @brief Get type of the intrinsic
-    * @retval PINHOLE_CAMERA_BROWN
+    * @retval PINHOLE_CAMERA_BROWN_ROLLING
     */
     EINTRINSIC getType() const override
     {
-      return PINHOLE_CAMERA_BROWN;
+      return PINHOLE_CAMERA_BROWN_ROLLING;
     }
 
     /**
@@ -128,13 +129,13 @@ class Pinhole_Intrinsic_Brown_T2_Rolling : public Pinhole_Intrinsic
     */
     bool updateFromParams( const std::vector<double> & params ) override
     {
-      if ( params.size() == 8 )
+      if ( params.size() == 9 )
       {
         *this = Pinhole_Intrinsic_Brown_T2_Rolling(
                   w_, h_,
-                  params[0], params[1], params[2], // focal, ppx, ppy
+                  params[0], params[1], params[2], // t, focal, ppx, ppy
                   params[3], params[4], params[5], // K1, K2, K3
-                  params[6], params[7] );          // T1, T2
+                  params[6], params[7], params[8] ); // T1, T2
         return true;
       }
       else
@@ -156,17 +157,17 @@ class Pinhole_Intrinsic_Brown_T2_Rolling : public Pinhole_Intrinsic
       if ( !(param & (int)Intrinsic_Parameter_Type::ADJUST_FOCAL_LENGTH)
           || param & (int)Intrinsic_Parameter_Type::NONE )
       {
-        constant_index.insert(constant_index.end(), 0);
+        constant_index.insert(constant_index.end(), 1);
       }
       if ( !(param & (int)Intrinsic_Parameter_Type::ADJUST_PRINCIPAL_POINT)
           || param & (int)Intrinsic_Parameter_Type::NONE )
       {
-        constant_index.insert(constant_index.end(), {1, 2});
+        constant_index.insert(constant_index.end(), {2, 3});
       }
       if ( !(param & (int)Intrinsic_Parameter_Type::ADJUST_DISTORTION)
           || param & (int)Intrinsic_Parameter_Type::NONE )
       {
-        constant_index.insert(constant_index.end(), {3, 4, 5, 6, 7});
+        constant_index.insert(constant_index.end(), {4, 5, 6, 7, 8});
       }
       return constant_index;
     }
@@ -225,7 +226,7 @@ class Pinhole_Intrinsic_Brown_T2_Rolling : public Pinhole_Intrinsic
     */
     static Vec2 distoFunction( const std::vector<double> & params, const Vec2 & p )
     {
-      const double k1 = params[0], k2 = params[1], k3 = params[2], t1 = params[3], t2 = params[4];
+      const double k1 = params[1], k2 = params[2], k3 = params[3], t1 = params[4], t2 = params[5];
       const double r2 = p( 0 ) * p( 0 ) + p( 1 ) * p( 1 );
       const double r4 = r2 * r2;
       const double r6 = r4 * r2;

@@ -95,6 +95,8 @@ namespace openMVG
         return ResidualErrorFunctor_Pinhole_Intrinsic_Radial_K3::Create(observation, weight);
       case PINHOLE_CAMERA_BROWN:
         return ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2::Create(observation, weight);
+      case PINHOLE_CAMERA_BROWN_ROLLING:
+        return ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2_Rolling::Create(intrinsic, observation, weight);
       case PINHOLE_CAMERA_FISHEYE:
         return ResidualErrorFunctor_Pinhole_Intrinsic_Fisheye::Create(observation, weight);
       case CAMERA_SPHERICAL:
@@ -586,6 +588,10 @@ namespace openMVG
             const IndexT indexCam = intrinsic_it.first;
 
             const std::vector<double> &vec_params = map_intrinsics.at(indexCam);
+            std::cout << "\n" << "##########################################################" << std::endl;
+            std::cout << "readout time after BA : " << vec_params.at(0) << std::endl;
+            std::cout << "##########################################################" << std::endl;
+            
             intrinsic_it.second->updateFromParams(vec_params);
           }
         }

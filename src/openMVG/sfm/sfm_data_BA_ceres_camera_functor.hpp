@@ -391,30 +391,31 @@ namespace openMVG
  *
  *  Data parameter blocks are the following <2,8,9,3>
  *  - 2 => dimension of the residuals,
- *  - 8 => the intrinsic data block [focal, principal point x, principal point y, K1, K2, K3, T1, T2],
- *  - 6 => the camera extrinsic data block (camera orientation and position) [R;t],
+ *  - 9 => the intrinsic data block [readout time,focal, principal point x, principal point y, K1, K2, K3, T1, T2],
+ *  - 9 => the camera extrinsic data block (camera orientation and position) [R;t],
  *         - rotation(angle axis), translation and camera velocity [rX,rY,rZ,tx,ty,tz,vx,vy,vz].
  *  - 3 => a 3D point data block.
  *
  */
     struct ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2_Rolling
     {
-      explicit ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2_Rolling(const double *const pos_2dpoint)
-          : m_pos_2dpoint(pos_2dpoint)
+      explicit ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2_Rolling(const uint32_t imageSize_h, const double *const pos_2dpoint)
+          : m_pos_2dpoint(pos_2dpoint), m_imageSize_h(imageSize_h)
       {
       }
 
       // Enum to map intrinsics parameters between openMVG & ceres camera data parameter block.
       enum : uint8_t
       {
-        OFFSET_FOCAL_LENGTH = 0,
-        OFFSET_PRINCIPAL_POINT_X = 1,
-        OFFSET_PRINCIPAL_POINT_Y = 2,
-        OFFSET_DISTO_K1 = 3,
-        OFFSET_DISTO_K2 = 4,
-        OFFSET_DISTO_K3 = 5,
-        OFFSET_DISTO_T1 = 6,
-        OFFSET_DISTO_T2 = 7,
+        OFFSET_READOUT_TIME =0,
+        OFFSET_FOCAL_LENGTH = 1,
+        OFFSET_PRINCIPAL_POINT_X = 2,
+        OFFSET_PRINCIPAL_POINT_Y = 3,
+        OFFSET_DISTO_K1 = 4,
+        OFFSET_DISTO_K2 = 5,
+        OFFSET_DISTO_K3 = 6,
+        OFFSET_DISTO_T1 = 7,
+        OFFSET_DISTO_T2 = 8,
       };
 
       /**
@@ -434,7 +435,7 @@ namespace openMVG
         // Time delay between lines
         // double t = 0.00001;
         //for T(ceres::Jet) operation
-        const T &t = T(0.03 / 3648);
+        const T &t = T( cam_intrinsics[OFFSET_READOUT_TIME]/(double)m_imageSize_h);
         const T &observation_y = T(m_pos_2dpoint[1]);
         // Apply velocity parameters
         Eigen::Map<const Eigen::Matrix<T, 3, 1>> cam_V((&cam_extrinsics[6]));
@@ -499,8 +500,26 @@ namespace openMVG
       }
 
       static int num_residuals() { return 2; }
-
+      // Factory to hide the construction of the CostFunction object from
+      // the client code.
+      static ceres::CostFunction *Create(
+          const cameras::IntrinsicBase *cameraInterface,
+          const Vec2 &observation,
+          const double weight = 0.0)
+      {
+          // std::cout << "Rolling Shutter Brown Model" << std::endl;
+          if (weight == 0.0)
+          {
+            return (new ceres::AutoDiffCostFunction<ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2_Rolling, 2, 9, 9, 3>(
+                new ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2_Rolling(cameraInterface->h() , observation.data())));
+          }
+          else
+          {
+            return (new ceres::AutoDiffCostFunction<WeightedCostFunction<ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2_Rolling>, 2, 9, 9, 3>(new WeightedCostFunction<ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2_Rolling>(new ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2_Rolling( cameraInterface->h(),observation.data()), weight)));
+          }
+      }
       const double *m_pos_2dpoint; // The 2D observation
+      const uint32_t m_imageSize_h; //image height
     };
 
     /**
@@ -600,18 +619,19 @@ namespace openMVG
       // Factory to hide the construction of the CostFunction object from
       // the client code.
       static ceres::CostFunction *Create(
+          const cameras::IntrinsicBase *cameraInterface,
           const Vec2 &observation,
           const double weight = 0.0)
       {
           // std::cout << "Rolling Shutter Brown Model" << std::endl;
           if (weight == 0.0)
           {
-            return (new ceres::AutoDiffCostFunction<ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2_Rolling, 2, 8, 9, 3>(
-                new ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2_Rolling(observation.data())));
+            return (new ceres::AutoDiffCostFunction<ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2, 2, 8, 9, 3>(
+                new ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2(observation.data())));
           }
           else
           {
-            return (new ceres::AutoDiffCostFunction<WeightedCostFunction<ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2_Rolling>, 2, 8, 9, 3>(new WeightedCostFunction<ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2_Rolling>(new ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2_Rolling(observation.data()), weight)));
+            return (new ceres::AutoDiffCostFunction<WeightedCostFunction<ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2>, 2, 8, 9, 3>(new WeightedCostFunction<ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2>(new ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2( observation.data()), weight)));
           }
       }
 
