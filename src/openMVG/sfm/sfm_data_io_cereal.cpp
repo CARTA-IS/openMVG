@@ -42,6 +42,7 @@ struct View_version_1
   IndexT id_view; // Id of the view
   IndexT id_intrinsic, id_pose; // Index of intrinsics and the pose
   IndexT ui_width, ui_height; // image size
+  IndexT t; // readout time
 
   // Constructor (use unique index for the view_id)
   View_version_1(
@@ -49,9 +50,9 @@ struct View_version_1
     IndexT view_id = UndefinedIndexT,
     IndexT intrinsic_id = UndefinedIndexT,
     IndexT pose_id = UndefinedIndexT,
-    IndexT width = UndefinedIndexT, IndexT height = UndefinedIndexT)
+    IndexT width = UndefinedIndexT, IndexT height = UndefinedIndexT, IndexT readout_time = UndefinedIndexT)
     :s_Img_path(sImgPath), id_view(view_id), id_intrinsic(intrinsic_id),
-    id_pose(pose_id), ui_width(width), ui_height(height)
+    id_pose(pose_id), ui_width(width), ui_height(height), t(readout_time)
     {}
 
   /**
@@ -69,6 +70,7 @@ struct View_version_1
        cereal::make_nvp("filename", filename),
        cereal::make_nvp("width", ui_width),
        cereal::make_nvp("height", ui_height),
+       cereal::make_nvp("readout time", t),
        cereal::make_nvp("id_view", id_view),
        cereal::make_nvp("id_intrinsic", id_intrinsic),
        cereal::make_nvp("id_pose", id_pose));

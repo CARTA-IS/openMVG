@@ -6,8 +6,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-#ifndef OPENMVG_CAMERAS_CAMERA_PINHOLE_BROWN_HPP
-#define OPENMVG_CAMERAS_CAMERA_PINHOLE_BROWN_HPP
+#ifndef OPENMVG_CAMERAS_CAMERA_PINHOLE_BROWN_ROLLING_HPP
+#define OPENMVG_CAMERAS_CAMERA_PINHOLE_BROWN_ROLLING_HPP
 
 #include <vector>
 
@@ -50,11 +50,11 @@ class Pinhole_Intrinsic_Brown_T2_Rolling : public Pinhole_Intrinsic
     * @param t2 Second tangential distortion coefficient
     */
     Pinhole_Intrinsic_Brown_T2_Rolling(
-      int w = 0, int h = 0, double t = 0.03,
+      int w = 0, int h = 0,
       double focal = 0.0, double ppx = 0, double ppy = 0,
       double k1 = 0.0, double k2 = 0.0, double k3 = 0.0,
-      double t1 = 0.0, double t2 = 0.0)
-      : Pinhole_Intrinsic( w, h, t, focal, ppx, ppy),
+      double t1 = 0.0, double t2 = 0.0,  double t = 0.03)
+      : Pinhole_Intrinsic( w, h, focal, ppx, ppy, t),
         params_({k1, k2, k3, t1, t2})
     {
     }
@@ -127,15 +127,15 @@ class Pinhole_Intrinsic_Brown_T2_Rolling : public Pinhole_Intrinsic
     * @retval true if update is correct
     * @retval false if there was an error during update
     */
-    bool updateFromParams( const std::vector<double> & params ) override
+    bool updateFromParams( const std::vector<double> & params) override
     {
-      if ( params.size() == 9 )
+      if ( params.size() == 8 )
       {
         *this = Pinhole_Intrinsic_Brown_T2_Rolling(
-                  w_, h_,
-                  params[0], params[1], params[2], // t, focal, ppx, ppy
+                  w_, h_, 
+                  params[0], params[1], params[2], // focal, ppx, ppy
                   params[3], params[4], params[5], // K1, K2, K3
-                  params[6], params[7], params[8] ); // T1, T2
+                  params[6], params[7], t_  ); // T1, T2
         return true;
       }
       else
@@ -226,7 +226,7 @@ class Pinhole_Intrinsic_Brown_T2_Rolling : public Pinhole_Intrinsic
     */
     static Vec2 distoFunction( const std::vector<double> & params, const Vec2 & p )
     {
-      const double k1 = params[1], k2 = params[2], k3 = params[3], t1 = params[4], t2 = params[5];
+      const double k1 = params[0], k2 = params[1], k3 = params[2], t1 = params[3], t2 = params[4];
       const double r2 = p( 0 ) * p( 0 ) + p( 1 ) * p( 1 );
       const double r4 = r2 * r2;
       const double r6 = r4 * r2;

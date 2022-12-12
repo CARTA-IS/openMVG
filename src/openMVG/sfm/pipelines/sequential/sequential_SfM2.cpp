@@ -454,6 +454,10 @@ bool SequentialSfMReconstructionEngine2::AddingMissingView
                 intrinsic = std::make_shared<Pinhole_Intrinsic_Brown_T2>
                   (view->ui_width, view->ui_height, focal, principal_point(0), principal_point(1));
               break;
+              case PINHOLE_CAMERA_BROWN_ROLLING:
+                intrinsic = std::make_shared<Pinhole_Intrinsic_Brown_T2_Rolling>
+                  (view->ui_width, view->ui_height, focal, principal_point(0), principal_point(1));
+              break;
               case PINHOLE_CAMERA_FISHEYE:
                 intrinsic = std::make_shared<Pinhole_Intrinsic_Fisheye>
                   (view->ui_width, view->ui_height, focal, principal_point(0), principal_point(1));

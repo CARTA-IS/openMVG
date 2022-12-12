@@ -144,7 +144,10 @@ struct IntrinsicBase : public Clonable<IntrinsicBase>
   * @retval false if there was an error during update
   */
   virtual bool updateFromParams( const std::vector<double> & params ) = 0;
-
+  bool updateReadoutTime(double t)
+  {
+    t_ = t;
+  }
   /**
   * @brief Return the list of parameter indexes that must be held constant
   * @param parametrization The given parametrization
@@ -249,6 +252,7 @@ struct IntrinsicBase : public Clonable<IntrinsicBase>
     stl::hash_combine( seed, static_cast<int>( this->getType() ) );
     stl::hash_combine( seed, w_ );
     stl::hash_combine( seed, h_ );
+    stl::hash_combine( seed, t_ );
     const std::vector<double> params = this->getParams();
     for ( const auto & param : params )
       stl::hash_combine( seed , param );

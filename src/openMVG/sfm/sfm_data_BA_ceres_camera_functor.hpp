@@ -407,15 +407,15 @@ namespace openMVG
       // Enum to map intrinsics parameters between openMVG & ceres camera data parameter block.
       enum : uint8_t
       {
-        OFFSET_READOUT_TIME =0,
-        OFFSET_FOCAL_LENGTH = 1,
-        OFFSET_PRINCIPAL_POINT_X = 2,
-        OFFSET_PRINCIPAL_POINT_Y = 3,
-        OFFSET_DISTO_K1 = 4,
-        OFFSET_DISTO_K2 = 5,
-        OFFSET_DISTO_K3 = 6,
-        OFFSET_DISTO_T1 = 7,
-        OFFSET_DISTO_T2 = 8,
+        OFFSET_READOUT_TIME =8,
+        OFFSET_FOCAL_LENGTH = 0,
+        OFFSET_PRINCIPAL_POINT_X = 1,
+        OFFSET_PRINCIPAL_POINT_Y = 2,
+        OFFSET_DISTO_K1 = 3,
+        OFFSET_DISTO_K2 = 4,
+        OFFSET_DISTO_K3 = 5,
+        OFFSET_DISTO_T1 = 6,
+        OFFSET_DISTO_T2 = 7,
       };
 
       /**
@@ -619,7 +619,6 @@ namespace openMVG
       // Factory to hide the construction of the CostFunction object from
       // the client code.
       static ceres::CostFunction *Create(
-          const cameras::IntrinsicBase *cameraInterface,
           const Vec2 &observation,
           const double weight = 0.0)
       {

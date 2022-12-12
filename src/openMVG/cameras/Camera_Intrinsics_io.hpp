@@ -16,6 +16,7 @@ void openMVG::cameras::IntrinsicBase::save( Archive & ar ) const
 {
   ar( cereal::make_nvp( "width", w_ ) );
   ar( cereal::make_nvp( "height", h_ ) );
+  ar( cereal::make_nvp("readout time", t_ ) );
 }
 
 template <class Archive>
@@ -23,6 +24,7 @@ void openMVG::cameras::IntrinsicBase::load( Archive & ar )
 {
   ar( cereal::make_nvp( "width", w_ ) );
   ar( cereal::make_nvp( "height", h_ ) );
+  ar( cereal::make_nvp( "readout time", t_ ) );
 }
 
 #endif // #ifndef OPENMVG_CAMERAS_CAMERA_INTRINSICS_IO_HPP

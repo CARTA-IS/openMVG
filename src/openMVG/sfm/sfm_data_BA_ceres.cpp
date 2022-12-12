@@ -311,6 +311,11 @@ namespace openMVG
         if (isValid(intrinsic_it.second->getType()))
         {
           map_intrinsics[indexCam] = intrinsic_it.second->getParams();
+          //Rolling Shutter
+          // insert readout time at 0
+          if (intrinsic_it.second->getType() == PINHOLE_CAMERA_BROWN_ROLLING)
+            map_intrinsics[indexCam].emplace_back(intrinsic_it.second->t());
+
           // When camera matrix exists.
           if (!map_intrinsics.at(indexCam).empty())
           {
@@ -587,12 +592,24 @@ namespace openMVG
           {
             const IndexT indexCam = intrinsic_it.first;
 
-            const std::vector<double> &vec_params = map_intrinsics.at(indexCam);
-            std::cout << "\n" << "##########################################################" << std::endl;
-            std::cout << "readout time after BA : " << vec_params.at(0) << std::endl;
-            std::cout << "##########################################################" << std::endl;
+            std::vector<double> &vec_params = map_intrinsics.at(indexCam);
+            //Rolling Shutter
+            // insert readout time at 0
+            if (intrinsic_it.second->getType() == PINHOLE_CAMERA_BROWN_ROLLING)
+            { 
+              double readoutTime = vec_params.at(8);
+              std::cout << "\n" << "##########################################################" << std::endl;
+              std::cout << "readout time after BA : " << readoutTime << std::endl;
+              std::cout << "##########################################################" << std::endl;
+              vec_params.pop_back();
+              intrinsic_it.second->updateReadoutTime(readoutTime);
+            }
+            bool chk = intrinsic_it.second->updateFromParams(vec_params);
             
-            intrinsic_it.second->updateFromParams(vec_params);
+            if(!chk){
+              std::cout << "vec params size" <<vec_params.size()<<std::endl;
+              std::cout<< "update failed" << std::endl;
+              }
           }
         }
 

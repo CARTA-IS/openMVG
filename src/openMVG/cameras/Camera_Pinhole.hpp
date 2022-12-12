@@ -54,9 +54,9 @@ class Pinhole_Intrinsic : public IntrinsicBase
     * @param ppy Principal point on y-axis
     */
     Pinhole_Intrinsic(
-      unsigned int w = 0, unsigned int h = 0, double t = 0.03,
+      unsigned int w = 0, unsigned int h = 0,
       double focal_length_pix = 0.0,
-      double ppx = 0.0, double ppy = 0.0 )
+      double ppx = 0.0, double ppy = 0.0, double t = 0.03)
       : IntrinsicBase( w, h ,t)
     {
       K_ << focal_length_pix, 0., ppx, 0., focal_length_pix, ppy, 0., 0., 1.;
@@ -72,9 +72,8 @@ class Pinhole_Intrinsic : public IntrinsicBase
     Pinhole_Intrinsic(
       unsigned int w,
       unsigned int h,
-      double t,
-      const Mat3& K)
-      : IntrinsicBase( w, h ,t), K_(K)
+      const Mat3& K, double t = 0.03)
+      : IntrinsicBase( w, h, t), K_(K)
     {
       K_(0,0) = K_(1,1) = (K(0,0) + K(1,1)) / 2.0;
       Kinv_ = K_.inverse();
@@ -216,7 +215,7 @@ class Pinhole_Intrinsic : public IntrinsicBase
     */
     std::vector<double> getParams() const override
     {
-      return  { t_ ,K_(0, 0), K_(0, 2), K_(1, 2) };
+      return  { K_(0, 0), K_(0, 2), K_(1, 2) };
     }
 
 
@@ -228,9 +227,9 @@ class Pinhole_Intrinsic : public IntrinsicBase
     */
     bool updateFromParams(const std::vector<double> & params) override
     {
-      if ( params.size() == 4 )
+      if ( params.size() == 3 )
       {
-        *this = Pinhole_Intrinsic( w_, h_, params[0], params[1], params[2], params[3] );
+        *this = Pinhole_Intrinsic( w_, h_, params[0], params[1], params[2] );
         return true;
       }
       else

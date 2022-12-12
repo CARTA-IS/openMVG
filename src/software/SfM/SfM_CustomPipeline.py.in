@@ -49,7 +49,7 @@ if not os.path.exists(matches_dir):
   os.mkdir(matches_dir)
 if not os.path.exists(matched_file):
   print ("1. Intrinsics analysis")
-  pIntrisics = subprocess.Popen( [os.path.join(OPENMVG_SFM_BIN, "openMVG_main_SfMInit_ImageListing"), "-P" ,"-i", input_dir, "-o", matches_dir, "-d", camera_file_params, "-c", "4", "-m", "1"] )
+  pIntrisics = subprocess.Popen( [os.path.join(OPENMVG_SFM_BIN, "openMVG_main_SfMInit_ImageListing"), "-P" ,"-i", input_dir, "-o", matches_dir, "-d", camera_file_params, "-c", "5", "-m", "1"] )
   pIntrisics.wait()
 
   print ("2. Compute features")
@@ -70,7 +70,7 @@ if not os.path.exists(os.path.join(global_dir, "sfm_data.bin")):
     
 
 print ("4. Do Sequential/Incremental reconstruction")
-pRecons = subprocess.Popen( [os.path.join(OPENMVG_SFM_BIN, "openMVG_main_IncrementalSfM2"),"-P",  "-i", global_dir+"/sfm_data.bin", "-m", matches_dir, "--match_file" ,matched_file, "-o", reconstruction_dir,"-c","4","-S", "EXISTING_POSE","-R"] )
+pRecons = subprocess.Popen( [os.path.join(OPENMVG_SFM_BIN, "openMVG_main_IncrementalSfM2"),"-P",  "-i", global_dir+"/sfm_data.bin", "-m", matches_dir, "--match_file" ,matched_file, "-o", reconstruction_dir,"-c","5","-S", "EXISTING_POSE","-R"] )
 pRecons.wait()
 
 print ("5. Colorize Structure")

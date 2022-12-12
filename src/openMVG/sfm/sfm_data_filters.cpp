@@ -62,7 +62,10 @@ IndexT RemoveOutliers_PixelResidualError
       }
       catch (std::out_of_range& e)
       {
-        ;//std::cout << view->id_pose <<" pose id is not exist!" << std::endl;
+        //std::cout << view->id_pose <<" pose id is not exist!" << std::endl;
+
+        std::cout << "vel: "<< vel.velocity() <<std::endl;
+        std::cout << "readouttime" << intrinsic->t() <<std::endl;
       }      
       openMVG::Vec3 rs_translation = pose.translation() - pose.rotation() * ((intrinsic->t()/(view->ui_height)) * (itObs->second.x[1]) * vel.velocity()); 
       openMVG::Vec3 normx = pose.rotation() * (iterTracks->second.X) + rs_translation;

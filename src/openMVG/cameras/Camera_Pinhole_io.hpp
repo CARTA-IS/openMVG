@@ -35,7 +35,7 @@ void openMVG::cameras::Pinhole_Intrinsic::load( Archive & ar )
     ar( cereal::make_nvp( "focal_length", focal_length ) );
     std::vector<double> pp( 2 );
     ar( cereal::make_nvp( "principal_point", pp ) );
-    *this = Pinhole_Intrinsic( w_, h_, focal_length, pp[0], pp[1] );
+    *this = Pinhole_Intrinsic( w_, h_, focal_length, pp[0], pp[1], t_ );
 }
 
 CEREAL_REGISTER_TYPE_WITH_NAME(openMVG::cameras::Pinhole_Intrinsic, "pinhole");
