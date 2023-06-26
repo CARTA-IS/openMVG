@@ -31,6 +31,7 @@
 
 #include "ceres/problem_impl.h"
 
+#include <iostream>
 #include <algorithm>
 #include <cstddef>
 #include <iterator>
@@ -92,7 +93,6 @@ ParameterBlock* ProblemImpl::InternalAddParameterBlock(double* values,
                                                        int size) {
   CHECK(values != NULL) << "Null pointer passed to AddParameterBlock "
                         << "for a parameter with size " << size;
-
   // Ignore the request if there is a block for the given pointer already.
   ParameterMap::iterator it = parameter_block_map_.find(values);
   if (it != parameter_block_map_.end()) {
@@ -240,11 +240,10 @@ ResidualBlock* ProblemImpl::AddResidualBlock(
   CHECK_NOTNULL(cost_function);
   CHECK_EQ(parameter_blocks.size(),
            cost_function->parameter_block_sizes().size());
-
   // Check the sizes match.
   const vector<int32>& parameter_block_sizes =
       cost_function->parameter_block_sizes();
-
+      
   if (!options_.disable_all_safety_checks) {
     CHECK_EQ(parameter_block_sizes.size(), parameter_blocks.size())
         << "Number of blocks input is different than the number of blocks "

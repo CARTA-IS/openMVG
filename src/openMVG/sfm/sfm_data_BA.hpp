@@ -10,11 +10,22 @@
 #define OPENMVG_SFM_SFM_DATA_BA_HPP
 
 #include "openMVG/cameras/Camera_Common.hpp"
+#include <string>
 
 namespace openMVG {
 namespace sfm {
 
 struct SfM_Data;
+
+/// Enum to control which parameter(s) of the Camera velocity must be refined or not -> Needs update later
+enum class Velocity_Parameter_Type : int
+{
+  // Note: Use power of two values in order to use bitwise operators.
+  NONE                = 1,     // Velocity parameters will be considered as FIXED
+  ADJUST_ROTATION     = 2,
+  ADJUST_TRANSLATION  = 4,
+  ADJUST_ALL = ADJUST_ROTATION | ADJUST_TRANSLATION
+};
 
 /// Enum to control which parameter(s) of the Camera motion must be refined or not
 enum class Extrinsic_Parameter_Type : int
@@ -23,7 +34,9 @@ enum class Extrinsic_Parameter_Type : int
   NONE                = 1,     // Extrinsic parameters will be considered as FIXED
   ADJUST_ROTATION     = 2,
   ADJUST_TRANSLATION  = 4,
-  ADJUST_ALL = ADJUST_ROTATION | ADJUST_TRANSLATION
+  ADJUST_VELOCITY     = 8,
+  ADJUST_ALL = ADJUST_ROTATION | ADJUST_TRANSLATION,
+  ADJUST_ROLLING = ADJUST_ROTATION | ADJUST_TRANSLATION | ADJUST_VELOCITY
 };
 
 /// Enum to control if the Structure must be refined or not
@@ -54,6 +67,7 @@ struct Optimize_Options
   Structure_Parameter_Type structure_opt;
   Control_Point_Parameter control_point_opt;
   bool use_motion_priors_opt;
+  std::string output_directory;
 
   Optimize_Options
   (
@@ -61,13 +75,15 @@ struct Optimize_Options
     const Extrinsic_Parameter_Type extrinsics = Extrinsic_Parameter_Type::ADJUST_ALL,
     const Structure_Parameter_Type structure = Structure_Parameter_Type::ADJUST_ALL,
     const Control_Point_Parameter & control_point = Control_Point_Parameter(0.0, false), // Default setting does not use GCP in the BA
-    const bool use_motion_priors = false
+    const bool use_motion_priors = false,
+    const std::string output_directory = "~/"
   )
   :intrinsics_opt(intrinsics),
    extrinsics_opt(extrinsics),
    structure_opt(structure),
    control_point_opt(control_point),
-   use_motion_priors_opt(use_motion_priors)
+   use_motion_priors_opt(use_motion_priors),
+   output_directory(output_directory)
   {
   }
 };

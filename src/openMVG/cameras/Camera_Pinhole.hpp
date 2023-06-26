@@ -48,6 +48,7 @@ class Pinhole_Intrinsic : public IntrinsicBase
     * @brief Constructor
     * @param w Width of the image plane
     * @param h Height of the image plane
+    * @param t Readout time for image
     * @param focal_length_pix Focal length (in pixel) of the camera
     * @param ppx Principal point on x-axis
     * @param ppy Principal point on y-axis
@@ -55,8 +56,8 @@ class Pinhole_Intrinsic : public IntrinsicBase
     Pinhole_Intrinsic(
       unsigned int w = 0, unsigned int h = 0,
       double focal_length_pix = 0.0,
-      double ppx = 0.0, double ppy = 0.0 )
-      : IntrinsicBase( w, h )
+      double ppx = 0.0, double ppy = 0.0, double t = 0.03)
+      : IntrinsicBase( w, h ,t)
     {
       K_ << focal_length_pix, 0., ppx, 0., focal_length_pix, ppy, 0., 0., 1.;
       Kinv_ = K_.inverse();
@@ -71,8 +72,8 @@ class Pinhole_Intrinsic : public IntrinsicBase
     Pinhole_Intrinsic(
       unsigned int w,
       unsigned int h,
-      const Mat3& K)
-      : IntrinsicBase( w, h ), K_(K)
+      const Mat3& K, double t = 0.03)
+      : IntrinsicBase( w, h, t), K_(K)
     {
       K_(0,0) = K_(1,1) = (K(0,0) + K(1,1)) / 2.0;
       Kinv_ = K_.inverse();
@@ -250,12 +251,12 @@ class Pinhole_Intrinsic : public IntrinsicBase
       if ( !(param & (int)Intrinsic_Parameter_Type::ADJUST_FOCAL_LENGTH)
            || param & (int)Intrinsic_Parameter_Type::NONE )
       {
-        constant_index.insert(constant_index.end(), 0);
+        constant_index.insert(constant_index.end(), 1);
       }
       if ( !(param & (int)Intrinsic_Parameter_Type::ADJUST_PRINCIPAL_POINT)
           || param & (int)Intrinsic_Parameter_Type::NONE )
       {
-        constant_index.insert(constant_index.end(), {1, 2});
+        constant_index.insert(constant_index.end(), {2, 3});
       }
       return constant_index;
     }

@@ -19,6 +19,7 @@
 #include "openMVG/sfm/sfm_data_filters.hpp"
 #include "openMVG/sfm/sfm_data_io.hpp"
 #include "openMVG/stl/stl.hpp"
+#include "openMVG/sfm/pipelines/sfm_engine.hpp"
 
 #include "third_party/histogram/histogram.hpp"
 #include "third_party/htmlDoc/htmlDoc.hpp"
@@ -115,20 +116,33 @@ namespace openMVG
       }
       // Else a starting pair was already initialized before
 
+        std::cout << "extrinsics : " << sfm_data_.GetPoses().size() << std::endl;
+        std::cout << "velocities : " << sfm_data_.GetVelocities().size() << std::endl;
+        std::cout << "##############################" << std::endl;
       // Initial pair Essential Matrix and [R|t] estimation.
       if (!MakeInitialPair3D(initial_pair_))
+      {
+        std::cout << "\n" << "Failed making initial pair 3d" << std::endl;
         return false;
+      }
 
       // Compute robust Resection of remaining images
       // - group of images will be selected and resection + scene completion will be tried
       size_t resectionGroupIndex = 0;
       std::vector<uint32_t> vec_possible_resection_indexes;
+
+        std::cout << "extrinsics : " << sfm_data_.GetPoses().size() << std::endl;
+        std::cout << "velocities : " << sfm_data_.GetVelocities().size() << std::endl;
+        std::cout << "##############################" << std::endl;
       while (FindImagesWithPossibleResection(vec_possible_resection_indexes))
       {
         bool bImageAdded = false;
         // Add images to the 3D reconstruction
         for (const auto &iter : vec_possible_resection_indexes)
         {
+          std::cout << "\n" << "##############################" << std::endl;
+          std::cout << "Start Resection"<< std::endl;
+          std::cout << "##############################" << std::endl;
           bImageAdded |= Resection(iter);
           set_remaining_view_id_.erase(iter);
         }
@@ -149,11 +163,13 @@ namespace openMVG
         }
         ++resectionGroupIndex;
       }
+      BundleAdjustment(b_use_rolling_shutter_);
       // Ensure there is no remaining outliers
       if (badTrackRejector(4.0, 0))
       {
         eraseUnstablePosesAndObservations(sfm_data_);
       }
+
 
       //-- Reconstruction done.
       //-- Display some statistics
@@ -588,6 +604,11 @@ namespace openMVG
         // Init structure
         Landmarks &landmarks = tiny_scene.structure;
 
+        // std::cout << "\n" << "##############################" << std::endl;
+        // std::cout << "sfm_data_.structure size : " << sfm_data_.structure.size() << std::endl;
+        // std::cout << "initial landmarks.size() : " << landmarks.size() << std::endl;
+        // std::cout << "##############################" << std::endl;
+        
         for (const auto &track_iterator : map_tracksCommon)
         {
           // Get corresponding points
@@ -618,33 +639,59 @@ namespace openMVG
             landmarks[track_iterator.first].X = X;
           }
         }
+        // std::cout << "\n" << "##############################" << std::endl;
+        // std::cout << "sfm_data_.structure size : " << sfm_data_.structure.size() << std::endl;
+        // std::cout << "after triangulate landmarks.size() : " << landmarks.size() << std::endl;
+        // std::cout << "##############################" << std::endl;
+
         Save(tiny_scene, stlplus::create_filespec(sOut_directory_, "initialPair.ply"), ESfM_Data(ALL));
 
         // - refine only Structure and Rotations & translations (keep intrinsic constant)
         Bundle_Adjustment_Ceres::BA_Ceres_options options(true, true);
         options.linear_solver_type_ = ceres::DENSE_SCHUR;
         Bundle_Adjustment_Ceres bundle_adjustment_obj(options);
+        
+        std::cout << "\n" << "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@" << std::endl;
+        std::cout << "Rolling Shutter Option before Tiny Adjust : " << this->b_use_rolling_shutter_ << std::endl;
+        std::cout << "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@" << std::endl;
+
         if (!bundle_adjustment_obj.Adjust(tiny_scene,
                                           Optimize_Options(
                                               Intrinsic_Parameter_Type::NONE,       // Keep intrinsic constant
                                               Extrinsic_Parameter_Type::ADJUST_ALL, // Adjust camera motion
-                                              Structure_Parameter_Type::ADJUST_ALL) // Adjust structure
-                                          ))
+                                              Structure_Parameter_Type::ADJUST_ALL//,
+                                              //Control_Point_Parameter(),
+                                              //this->b_use_motion_prior_,
+                                              //this->b_use_rolling_shutter_,
+                                              //this->b_use_velocity_optimization_ // Adjust structure
+                                          )))
         {
           return false;
         }
 
+        // std::cout << "\n" << "##############################" << std::endl;
+        // std::cout << "after tiny BA sfm_data_.structure size : " << sfm_data_.structure.size() << std::endl;
+        // std::cout << "landmarks.size() : " << landmarks.size() << std::endl;
+        // std::cout << "##############################" << std::endl;
+        
         // Save computed data
         const Pose3 pose_I = sfm_data_.poses[view_I->id_pose] = tiny_scene.poses[view_I->id_pose];
         const Pose3 pose_J = sfm_data_.poses[view_J->id_pose] = tiny_scene.poses[view_J->id_pose];
+        sfm_data_.velocities[view_I->id_pose] =TranslationVelocity(Vec3::Zero());
+        sfm_data_.velocities[view_J->id_pose] =TranslationVelocity(Vec3::Zero());
+        
         map_ACThreshold_.insert({I, relativePose_info.found_residual_precision});
         map_ACThreshold_.insert({J, relativePose_info.found_residual_precision});
         set_remaining_view_id_.erase(view_I->id_view);
         set_remaining_view_id_.erase(view_J->id_view);
 
+        int trackCount = 0;
+        int CheiralityTestCount = 0;
         // List inliers and save them
         for (const auto &landmark_entry : tiny_scene.GetLandmarks())
         {
+          trackCount = trackCount + 1;
+
           const IndexT trackId = landmark_entry.first;
           const Landmark &landmark = landmark_entry.second;
           const Observations &obs = landmark.obs;
@@ -662,6 +709,15 @@ namespace openMVG
               pose_I, cam_I, pose_J, cam_J, ob_xI_ud, ob_xJ_ud);
           const Vec2 residual_I = cam_I->residual(pose_I(landmark.X), ob_xI.x);
           const Vec2 residual_J = cam_J->residual(pose_J(landmark.X), ob_xJ.x);
+
+          // std::cout << "\n" << "##############################" << std::endl;
+          // std::cout << "angle : " << angle << std::endl;
+          // std::cout << "pose_I.rotation() : " << pose_I.rotation() << std::endl;
+          // std::cout << "pose_I.center() : " << pose_I.center() << std::endl;
+          // std::cout << "pose_J.rotation() : " << pose_J.rotation() << std::endl;
+          // std::cout << "pose_J.center() : " << pose_J.center() << std::endl;
+          // std::cout << "##############################" << std::endl;
+          
           if (angle > 2.0 &&
               CheiralityTest((*cam_I)(ob_xI_ud), pose_I,
                              (*cam_J)(ob_xJ_ud), pose_J,
@@ -670,8 +726,16 @@ namespace openMVG
               residual_J.norm() < relativePose_info.found_residual_precision)
           {
             sfm_data_.structure[trackId] = landmarks[trackId];
+            CheiralityTestCount = CheiralityTestCount + 1;
           }
         }
+        // std::cout << "\n" << "##############################" << std::endl;
+        // std::cout << "count trackId : " << trackCount << std::endl;
+        // std::cout << "count CheiralityTest : " << CheiralityTestCount << std::endl;
+        // std::cout << "landmarks.size() : " << landmarks.size() << std::endl;
+        // std::cout << "sfm_data_.structure size : " << sfm_data_.structure.size() << std::endl;
+        // std::cout << "##############################" << std::endl;
+
         // Save outlier residual information
         Histogram<double> histoResiduals;
         std::cout << "\n"
@@ -732,6 +796,7 @@ namespace openMVG
           htmlFileStream << html_doc_stream_->getDoc();
         }
       }
+      std::cout << "\n" << "Is sfm_data_.structure empty? : " << sfm_data_.structure.empty() <<std::endl;
       return !sfm_data_.structure.empty();
     }
 
@@ -739,6 +804,7 @@ namespace openMVG
     {
       // Collect residuals for each observation
       std::vector<float> vec_residuals;
+      std::cout << "\n" << "sfm_data_.structure size : " << sfm_data_.structure.size() << std::endl;
       vec_residuals.reserve(sfm_data_.structure.size());
       for (const auto &landmark_entry : sfm_data_.GetLandmarks())
       {
@@ -748,7 +814,12 @@ namespace openMVG
           const View *view = sfm_data_.GetViews().find(observation.first)->second.get();
           const Pose3 pose = sfm_data_.GetPoseOrDie(view);
           const auto intrinsic = sfm_data_.GetIntrinsics().find(view->id_intrinsic)->second;
-          const Vec2 residual = intrinsic->residual(pose(landmark_entry.second.X), observation.second.x);
+          ///Rolling shutter Projection
+          const TranslationVelocity vel = sfm_data_.GetVelocities().at(view->id_pose);   
+          openMVG::Vec3 rs_translation = pose.translation() - pose.rotation() * ((0.03/(view->ui_height)) * observation.second.x[1] * vel.velocity()); 
+          openMVG::Vec3 normx = pose.rotation() * landmark_entry.second.X + rs_translation;
+          /////
+          const Vec2 residual = intrinsic->residual(normx , observation.second.x);///pose(landmark_entry.second.X), observation.second.x);
           vec_residuals.emplace_back(std::abs(residual(0)));
           vec_residuals.emplace_back(std::abs(residual(1)));
         }
@@ -980,6 +1051,7 @@ namespace openMVG
                 << "-- Robust Resection of view: " << viewIndex << std::endl;
 
       geometry::Pose3 pose;
+
       const bool bResection = sfm::SfM_Localizer::Localize(
           optional_intrinsic ? resection_method_ : resection::SolverType::DLT_6POINTS,
           {view_I->ui_width, view_I->ui_height},
@@ -1064,16 +1136,34 @@ namespace openMVG
         }
         const bool b_refine_pose = true;
         const bool b_refine_intrinsics = false;
-        if (!sfm::SfM_Localizer::RefinePose(
-                optional_intrinsic.get(), pose,
-                resection_data, b_refine_pose, b_refine_intrinsics))
+        geometry::TranslationVelocity vel;
+        
+        if (this->b_use_rolling_shutter_)
         {
-          return false;
+          if (!sfm::SfM_Localizer::RefinePoseRolling(
+                  optional_intrinsic.get(), pose, vel,
+                  resection_data, b_refine_pose, b_refine_intrinsics))
+          {
+            return false;
+          }
         }
+        else
+        {
+          if (!sfm::SfM_Localizer::RefinePose(
+                  optional_intrinsic.get(), pose,
+                  resection_data, b_refine_pose, b_refine_intrinsics))
+          {
+            return false;
+          }
+        }
+        // std::cout << "\n" << "##############################" << std::endl;
+        // std::cout << "Finish RefinePose BA"<< std::endl;
+        // std::cout << "##############################" << std::endl;
 
         // E. Update the global scene with:
         // - the new found camera pose
         sfm_data_.poses[view_I->id_pose] = pose;
+        sfm_data_.velocities[view_I->id_pose] = vel;
         // - track the view's AContrario robust estimation found threshold
         map_ACThreshold_.insert({viewIndex, resection_data.error_max});
         // - intrinsic parameters (if the view has no intrinsic group add a new one)
@@ -1105,6 +1195,12 @@ namespace openMVG
         const View *view_I = sfm_data_.GetViews().at(I).get();
         const IntrinsicBase *cam_I = sfm_data_.GetIntrinsics().at(view_I->id_intrinsic).get();
         const Pose3 pose_I = sfm_data_.GetPoseOrDie(view_I);
+        
+        std::cout << "id pose :" << view_I->id_pose << std::endl;
+        std::cout << "ext size : "  << sfm_data_.GetPoses().size() << std::endl;
+        std::cout << "velocities size : " << sfm_data_.GetVelocities().size() << std::endl;
+        
+        const TranslationVelocity vel_I = sfm_data_.GetVelocities().at(view_I->id_pose);
 
         // Vector of all already reconstructed views
         const std::set<IndexT> valid_views = Get_Valid_Views(sfm_data_);
@@ -1146,10 +1242,13 @@ namespace openMVG
                   const View *view_J = sfm_data_.GetViews().at(J).get();
                   const IntrinsicBase *cam_J = sfm_data_.GetIntrinsics().at(view_J->id_intrinsic).get();
                   const Pose3 pose_J = sfm_data_.GetPoseOrDie(view_J);
+                  const TranslationVelocity vel_J = sfm_data_.GetVelocities().at(view_J->id_pose);
                   const Vec2 xJ = features_provider_->feats_per_view.at(J)[allViews_of_track.at(J)].coords().cast<double>();
 
                   // Position of the point in view I
                   const Vec2 xI = features_provider_->feats_per_view.at(I)[track.at(I)].coords().cast<double>();
+                  
+                 
 
                   // Try to triangulate a 3D point from J view
                   // A new 3D point must be added
@@ -1158,13 +1257,17 @@ namespace openMVG
                       xI_ud = cam_I->get_ud_pixel(xI),
                       xJ_ud = cam_J->get_ud_pixel(xJ);
                   Vec3 X = Vec3::Zero();
+                   //Rolling shutter Translation
+                  openMVG::Vec3 rs_translation_I = pose_I.translation() - pose_I.rotation() * ((0.03/3648) * xI_ud[1] * vel_I.velocity()); 
+                  openMVG::Vec3 rs_translation_J = pose_J.translation() - pose_J.rotation() * ((0.03/3648) * xJ_ud[1] * vel_J.velocity()); 
+                  ////////////
 
                   if (Triangulate2View(
                           pose_I.rotation(),
-                          pose_I.translation(),
+                          rs_translation_I,
                           (*cam_I)(xI_ud),
                           pose_J.rotation(),
-                          pose_J.translation(),
+                          rs_translation_J,
                           (*cam_J)(xJ_ud),
                           X,
                           triangulation_method_))
@@ -1172,8 +1275,12 @@ namespace openMVG
                     // Check triangulation result
                     const double angle = AngleBetweenRay(
                         pose_I, cam_I, pose_J, cam_J, xI_ud, xJ_ud);
-                    const Vec2 residual_I = cam_I->residual(pose_I(X), xI);
-                    const Vec2 residual_J = cam_J->residual(pose_J(X), xJ);
+                    ///Rolling shutter Projection
+                    openMVG::Vec3 normx_I = pose_I.rotation() * X + rs_translation_I;
+                    openMVG::Vec3 normx_J = pose_J.rotation() * X + rs_translation_J;
+                    /////
+                    const Vec2 residual_I = cam_I->residual(normx_I, xI);
+                    const Vec2 residual_J = cam_J->residual(normx_J, xJ);
                     if (
                         //  - Check angle (small angle leads to imprecise triangulation)
                         angle > 2.0 &&
@@ -1213,8 +1320,12 @@ namespace openMVG
               const Pose3 pose_J = sfm_data_.GetPoseOrDie(view_J);
               const Vec2 xJ = features_provider_->feats_per_view.at(J)[allViews_of_track.at(J)].coords().cast<double>();
               const Vec2 xJ_ud = cam_J->get_ud_pixel(xJ);
-
-              const Vec2 residual = cam_J->residual(pose_J(landmark.X), xJ);
+              ///Rolling shutter Projection
+              const TranslationVelocity vel_J = sfm_data_.GetVelocities().at(view_J->id_pose);   
+              openMVG::Vec3 rs_translation_J = pose_J.translation() - pose_J.rotation() * ((0.03/(view_J->ui_height)) * xJ_ud[1] * vel_J.velocity()); 
+              openMVG::Vec3 normx_J = pose_J.rotation() * landmark.X + rs_translation_J;
+              /////
+              const Vec2 residual = cam_J->residual( normx_J, xJ);//pose_J(landmark.X), xJ);
               if (CheiralityTest((*cam_J)(xJ_ud), pose_J, landmark.X) && residual.norm() < std::max(4.0, map_ACThreshold_.at(J)))
               {
                 landmark.obs[J] = Observation(xJ, allViews_of_track.at(J));
@@ -1227,7 +1338,7 @@ namespace openMVG
     }
 
     /// Bundle adjustment to refine Structure; Motion and Intrinsics
-    bool SequentialSfMReconstructionEngine::BundleAdjustment()
+    bool SequentialSfMReconstructionEngine::BundleAdjustment(bool b_rs)
     {
       Bundle_Adjustment_Ceres::BA_Ceres_options options;
       if (sfm_data_.GetPoses().size() > 100 &&
@@ -1243,12 +1354,24 @@ namespace openMVG
       {
         options.linear_solver_type_ = ceres::DENSE_SCHUR;
       }
+      options.preconditioner_type_ = ceres::JACOBI;
+      options.linear_solver_type_=ceres::SPARSE_SCHUR;
       Bundle_Adjustment_Ceres bundle_adjustment_obj(options);
+      Extrinsic_Parameter_Type extrinsic_model;
+      if (b_rs){
+        std::cout<<"RSBA on!!!!" <<std::endl;
+        extrinsic_model = Extrinsic_Parameter_Type::ADJUST_ROLLING;
+      }
+      else
+        extrinsic_model = Extrinsic_Parameter_Type::ADJUST_ALL;
+
       const Optimize_Options ba_refine_options(ReconstructionEngine::intrinsic_refinement_options_,
-                                               Extrinsic_Parameter_Type::ADJUST_ALL, // Adjust camera motion
+                                               extrinsic_model, // Adjust camera motion
                                                Structure_Parameter_Type::ADJUST_ALL, // Adjust scene structure
                                                Control_Point_Parameter(),
-                                               this->b_use_motion_prior_);
+                                               this->b_use_motion_prior_,
+                                               this->sOut_directory_
+                                               );
       return bundle_adjustment_obj.Adjust(sfm_data_, ba_refine_options);
     }
 

@@ -28,7 +28,7 @@ TEST(Camera_IO_ceral, SaveRead) {
     {
       PINHOLE_CAMERA,
       PINHOLE_CAMERA_RADIAL1, PINHOLE_CAMERA_RADIAL3,
-      PINHOLE_CAMERA_BROWN,
+      PINHOLE_CAMERA_BROWN,PINHOLE_CAMERA_BROWN_ROLLING,
       PINHOLE_CAMERA_FISHEYE,
       CAMERA_SPHERICAL
     };
@@ -60,6 +60,10 @@ TEST(Camera_IO_ceral, SaveRead) {
       break;
     case PINHOLE_CAMERA_BROWN:
       intrinsic = std::make_shared<Pinhole_Intrinsic_Brown_T2>
+        (width, height, focal, ppx, ppy);
+      break;
+    case PINHOLE_CAMERA_BROWN_ROLLING:
+      intrinsic = std::make_shared<Pinhole_Intrinsic_Brown_T2_Rolling>
         (width, height, focal, ppx, ppy);
       break;
     case PINHOLE_CAMERA_FISHEYE:

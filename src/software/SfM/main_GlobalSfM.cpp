@@ -213,6 +213,10 @@ int main(int argc, char **argv)
       ESfM_Data(ALL));
 
     Save(sfmEngine.Get_SfM_Data(),
+      stlplus::create_filespec(sOutDir, "sfm_data", ".json"),
+      ESfM_Data(ALL));
+
+    Save(sfmEngine.Get_SfM_Data(),
       stlplus::create_filespec(sOutDir, "cloud_and_poses", ".ply"),
       ESfM_Data(ALL));
 

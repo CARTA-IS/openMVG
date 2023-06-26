@@ -13,6 +13,9 @@ UNIT_TEST(openMVG Camera_Pinhole_Radial openMVG_camera)
 
 UNIT_TEST(openMVG Camera_Pinhole_Brown openMVG_camera)
 
+
+UNIT_TEST(openMVG Camera_Pinhole_Brown_Rolling openMVG_camera)
+
 UNIT_TEST(openMVG Camera_Pinhole_Fisheye openMVG_camera)
 
 UNIT_TEST(openMVG Camera_Spherical openMVG_camera)

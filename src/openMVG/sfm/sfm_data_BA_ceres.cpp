@@ -24,11 +24,13 @@
 #include "openMVG/sfm/sfm_data_transform.hpp"
 #include "openMVG/sfm/sfm_data.hpp"
 #include "openMVG/types.hpp"
+#include "openMVG/sfm/pipelines/sfm_engine.hpp"
 
 #include <ceres/rotation.h>
 #include <ceres/types.h>
 
 #include <iostream>
+#include <fstream>
 #include <limits>
 
 namespace openMVG
@@ -80,7 +82,8 @@ namespace openMVG
     ceres::CostFunction *IntrinsicsToCostFunction(
         IntrinsicBase *intrinsic,
         const Vec2 &observation,
-        const double weight)
+        const double weight
+        )
     {
       switch (intrinsic->getType())
       {
@@ -92,6 +95,8 @@ namespace openMVG
         return ResidualErrorFunctor_Pinhole_Intrinsic_Radial_K3::Create(observation, weight);
       case PINHOLE_CAMERA_BROWN:
         return ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2::Create(observation, weight);
+      case PINHOLE_CAMERA_BROWN_ROLLING:
+        return ResidualErrorFunctor_Pinhole_Intrinsic_Brown_T2_Rolling::Create(intrinsic, observation, weight);
       case PINHOLE_CAMERA_FISHEYE:
         return ResidualErrorFunctor_Pinhole_Intrinsic_Fisheye::Create(observation, weight);
       case CAMERA_SPHERICAL:
@@ -167,6 +172,11 @@ namespace openMVG
       // parameters for cameras and points are added automatically.
       //----------
 
+      std::cout << "\n" << "##############################" << std::endl;
+      std::cout << "Inside Adjust()" << std::endl;
+      std::cout << "Extrinsic_Parameter_Type : " << static_cast<int>(options.extrinsics_opt) << std::endl;
+      std::cout << "##############################" << std::endl;
+
       double pose_center_robust_fitting_error = 0.0;
       openMVG::geometry::Similarity3 sim_to_center;
       bool b_usable_prior = false;
@@ -229,8 +239,9 @@ namespace openMVG
       // Data wrapper for refinement:
       Hash_Map<IndexT, std::vector<double>> map_intrinsics;
       Hash_Map<IndexT, std::vector<double>> map_poses;
+      // Hash_Map<IndexT, std::vector<double>> map_velocities;
 
-      // Setup Poses data & subparametrization
+      // Setup Poses data & subparametrization      
       for (const auto &pose_it : sfm_data.poses)
       {
         const IndexT indexPose = pose_it.first;
@@ -241,37 +252,55 @@ namespace openMVG
 
         double angleAxis[3];
         ceres::RotationMatrixToAngleAxis((const double *)R.data(), angleAxis);
-        // angleAxis + translation
-        map_poses[indexPose] = {angleAxis[0], angleAxis[1], angleAxis[2], t(0), t(1), t(2)};
-
+        // Add sfm_data velocity
+        const TranslationVelocity &velocity = sfm_data.velocities[indexPose];
+        const Vec3 v = velocity.velocity();
+        // angleAxis + translation + velocity
+        map_poses[indexPose] = {angleAxis[0], angleAxis[1], angleAxis[2], t(0), t(1), t(2), v(0), v(1), v(2)};
+        
         double *parameter_block = &map_poses.at(indexPose)[0];
-        problem.AddParameterBlock(parameter_block, 6);
+        problem.AddParameterBlock(parameter_block, 9);
+        std::vector<int> vec_constant_extrinsic;
+        // std::cout << "Check vec_constant_extrinsic is empty " << vec_constant_extrinsic.empty() << std::endl;
+        // if (options.extrinsics_opt == Extrinsic_Parameter_Type::ADJUST_ROLLING)
+        // {
+        //   std::cout << "Inside Adjust() Rolling Shutter : Rotation & Translation & Velocity" << std::endl;
+        //   vec_constant_extrinsic.insert(vec_constant_extrinsic.end(), {6, 7, 8});
+        // }
+        
+        if (options.extrinsics_opt == Extrinsic_Parameter_Type::ADJUST_ALL)
+        {
+          std::cout << "Inside Adjust() Rolling Shutter : Rotation & Translation" << std::endl;
+          vec_constant_extrinsic.insert(vec_constant_extrinsic.end(), {6, 7, 8});
+        }
+        else if (options.extrinsics_opt == Extrinsic_Parameter_Type::ADJUST_VELOCITY)
+        {
+          std::cout << "Inside Adjust() Rolling Shutter : Velocity" << std::endl;
+          vec_constant_extrinsic.insert(vec_constant_extrinsic.end(), {0, 1, 2, 3, 4, 5});
+        }
+        
         if (options.extrinsics_opt == Extrinsic_Parameter_Type::NONE)
         {
           // set the whole parameter block as constant for best performance
           problem.SetParameterBlockConstant(parameter_block);
-        }
-        else // Subset parametrization
+        } 
+        // If we adjust only the translation, we must set ROTATION as constant
+        if (options.extrinsics_opt == Extrinsic_Parameter_Type::ADJUST_TRANSLATION)
         {
-          std::vector<int> vec_constant_extrinsic;
-          // If we adjust only the translation, we must set ROTATION as constant
-          if (options.extrinsics_opt == Extrinsic_Parameter_Type::ADJUST_TRANSLATION)
-          {
-            // Subset rotation parametrization
-            vec_constant_extrinsic.insert(vec_constant_extrinsic.end(), {0, 1, 2});
-          }
-          // If we adjust only the rotation, we must set TRANSLATION as constant
-          if (options.extrinsics_opt == Extrinsic_Parameter_Type::ADJUST_ROTATION)
-          {
-            // Subset translation parametrization
-            vec_constant_extrinsic.insert(vec_constant_extrinsic.end(), {3, 4, 5});
-          }
-          if (!vec_constant_extrinsic.empty())
-          {
-            ceres::SubsetParameterization *subset_parameterization =
-                new ceres::SubsetParameterization(6, vec_constant_extrinsic);
-            problem.SetParameterization(parameter_block, subset_parameterization);
-          }
+          // Subset rotation and velocity parametrization
+          vec_constant_extrinsic.insert(vec_constant_extrinsic.end(), {0, 1, 2, 6, 7, 8});
+        }
+        // If we adjust only the rotation, we must set TRANSLATION as constant
+        if (options.extrinsics_opt == Extrinsic_Parameter_Type::ADJUST_ROTATION)
+        {
+          // Subset translation and velocity parametrization
+          vec_constant_extrinsic.insert(vec_constant_extrinsic.end(), {3, 4, 5, 6, 7, 8});
+        }
+        if (!vec_constant_extrinsic.empty())
+        {
+          ceres::SubsetParameterization *subset_parameterization =
+              new ceres::SubsetParameterization(9, vec_constant_extrinsic);
+          problem.SetParameterization(parameter_block, subset_parameterization);
         }
       }
 
@@ -279,14 +308,20 @@ namespace openMVG
       for (const auto &intrinsic_it : sfm_data.intrinsics)
       {
         const IndexT indexCam = intrinsic_it.first;
-
         if (isValid(intrinsic_it.second->getType()))
         {
           map_intrinsics[indexCam] = intrinsic_it.second->getParams();
+          //Rolling Shutter
+          // insert readout time at 0
+          if (intrinsic_it.second->getType() == PINHOLE_CAMERA_BROWN_ROLLING)
+            map_intrinsics[indexCam].emplace_back(intrinsic_it.second->t());
+
+          // When camera matrix exists.
           if (!map_intrinsics.at(indexCam).empty())
           {
             double *parameter_block = &map_intrinsics.at(indexCam)[0];
             problem.AddParameterBlock(parameter_block, map_intrinsics.at(indexCam).size());
+            // std::cout << &map_intrinsics.at(indexCam)[0] << std::endl;
             if (options.intrinsics_opt == Intrinsic_Parameter_Type::NONE)
             {
               // set the whole parameter block as constant for best performance
@@ -333,24 +368,28 @@ namespace openMVG
           // image location and compares the reprojection against the observation.
           ceres::CostFunction *cost_function =
               IntrinsicsToCostFunction(sfm_data.intrinsics.at(view->id_intrinsic).get(),
-                                       obs_it.second.x);
+                                       obs_it.second.x,
+                                       0.0);
 
+          // Whether K exists or not
           if (cost_function)
           {
+            // When camera matrix exists
             if (!map_intrinsics.at(view->id_intrinsic).empty())
             {
               problem.AddResidualBlock(cost_function,
-                                       p_LossFunction,
-                                       &map_intrinsics.at(view->id_intrinsic)[0],
-                                       &map_poses.at(view->id_pose)[0],
-                                       structure_landmark_it.second.X.data());
+                                      p_LossFunction,
+                                      &map_intrinsics.at(view->id_intrinsic)[0],
+                                      &map_poses.at(view->id_pose)[0],
+                                      structure_landmark_it.second.X.data());
             }
+            // When camera matrix doesn't exist -> No camera info at all which means unusual
             else
             {
               problem.AddResidualBlock(cost_function,
-                                       p_LossFunction,
-                                       &map_poses.at(view->id_pose)[0],
-                                       structure_landmark_it.second.X.data());
+                        p_LossFunction,
+                        &map_poses.at(view->id_pose)[0],
+                        structure_landmark_it.second.X.data());
             }
           }
           else
@@ -365,6 +404,7 @@ namespace openMVG
 
       if (options.control_point_opt.bUse_control_points)
       {
+        std::cout << "GCP option : " << options.control_point_opt.bUse_control_points << std::endl;
         // Use Ground Control Point:
         // - fixed 3D points with weighted observations
         for (auto &gcp_landmark_it : sfm_data.control_points)
@@ -384,7 +424,7 @@ namespace openMVG
                     sfm_data.intrinsics.at(view->id_intrinsic).get(),
                     obs_it.second.x,
                     options.control_point_opt.weight);
-
+            
             if (cost_function)
             {
               if (!map_intrinsics.at(view->id_intrinsic).empty())
@@ -421,21 +461,20 @@ namespace openMVG
       // Add Pose prior constraints if any
       if (b_usable_prior)
       {
+        std::cout << "Pose prior option : " << b_usable_prior << std::endl;
         for (const auto &view_it : sfm_data.GetViews())
         {
           const sfm::ViewPriors *prior = dynamic_cast<sfm::ViewPriors *>(view_it.second.get());
           if (prior != nullptr && prior->b_use_pose_center_ && sfm_data.IsPoseAndIntrinsicDefined(prior))
           {
-            // Add the cost functor (distance from Pose prior to the SfM_Data Pose center)
             ceres::CostFunction *cost_function =
-                new ceres::AutoDiffCostFunction<PoseCenterConstraintCostFunction, 3, 6>(
+                new ceres::AutoDiffCostFunction<PoseCenterConstraintCostFunction, 3, 9>(
                     new PoseCenterConstraintCostFunction(prior->pose_center_, prior->center_weight_));
-
             problem.AddResidualBlock(
-                cost_function,
-                new ceres::HuberLoss(
-                    Square(pose_center_robust_fitting_error)),
-                &map_poses.at(prior->id_view)[0]);
+              cost_function,
+              new ceres::HuberLoss(
+                  Square(pose_center_robust_fitting_error)),
+              &map_poses.at(prior->id_view)[0]); 
           }
         }
       }
@@ -457,7 +496,7 @@ namespace openMVG
       ceres_config_options.num_linear_solver_threads = ceres_options_.nb_threads_;
 #endif
       ceres_config_options.parameter_tolerance = ceres_options_.parameter_tolerance_;
-
+      
       // Solve BA
       ceres::Solver::Summary summary;
       ceres::Solve(ceres_config_options, &problem, &summary);
@@ -494,19 +533,58 @@ namespace openMVG
         // Update camera poses with refined data
         if (options.extrinsics_opt != Extrinsic_Parameter_Type::NONE)
         {
-          for (auto &pose_it : sfm_data.poses)
+          if (options.extrinsics_opt == Extrinsic_Parameter_Type::ADJUST_ROLLING)
           {
-            const IndexT indexPose = pose_it.first;
+            std::ofstream foutput;
+            std::string directory = options.output_directory;
+            foutput.open(directory + "/velocity.txt", std::ios_base::app);
+            foutput << "##########################################################" << "\n";
+            for (auto &pose_it : sfm_data.poses)
+            {
+              const IndexT indexPose = pose_it.first;
 
-            Mat3 R_refined;
-            ceres::AngleAxisToRotationMatrix(&map_poses.at(indexPose)[0], R_refined.data());
-            Vec3 t_refined(map_poses.at(indexPose)[3], map_poses.at(indexPose)[4], map_poses.at(indexPose)[5]);
-            // Update the pose
-            Pose3 &pose = pose_it.second;
-            pose = Pose3(R_refined, -R_refined.transpose() * t_refined);
+              Mat3 R_refined;
+              ceres::AngleAxisToRotationMatrix(&map_poses.at(indexPose)[0], R_refined.data());
+              Vec3 t_refined(map_poses.at(indexPose)[3], map_poses.at(indexPose)[4], map_poses.at(indexPose)[5]);
+              Vec3 v_refined(map_poses.at(indexPose)[6], map_poses.at(indexPose)[7], map_poses.at(indexPose)[8]);
+
+              if (foutput.is_open())
+              {
+                foutput << map_poses.at(indexPose)[6] << " " << map_poses.at(indexPose)[7] << " " << map_poses.at(indexPose)[8] << "\n";
+              }
+              std::cout << "\n" << "##########################################################" << std::endl;
+              std::cout << "Velocity after BA : " << map_poses.at(indexPose)[6] << " " << map_poses.at(indexPose)[7] << " " << map_poses.at(indexPose)[8] << std::endl;
+              std::cout << "##########################################################" << std::endl;
+
+              // Update the pose
+              Pose3 &pose = pose_it.second;
+              pose = Pose3(R_refined, -R_refined.transpose() * t_refined);
+              // Update the velocity
+              TranslationVelocity &velocity = sfm_data.velocities[indexPose];
+              velocity = v_refined;
+            }
+            foutput << "##########################################################" << "\n";
+            foutput.close();
+          }
+          else
+          {
+            for (auto &pose_it : sfm_data.poses)
+            {
+              const IndexT indexPose = pose_it.first;
+
+              Mat3 R_refined;
+              ceres::AngleAxisToRotationMatrix(&map_poses.at(indexPose)[0], R_refined.data());
+              Vec3 t_refined(map_poses.at(indexPose)[3], map_poses.at(indexPose)[4], map_poses.at(indexPose)[5]);
+              // Update the pose
+              Pose3 &pose = pose_it.second;
+              pose = Pose3(R_refined, -R_refined.transpose() * t_refined);
+              std::cout << "\n" << "##########################################################" << std::endl;
+              std::cout << "Velocity after BA : " << map_poses.at(indexPose)[6] << " " << map_poses.at(indexPose)[7] << " " << map_poses.at(indexPose)[8] << std::endl;
+              std::cout << "##########################################################" << std::endl;
+            }
           }
         }
-
+      
         // Update camera intrinsics with refined data
         if (options.intrinsics_opt != Intrinsic_Parameter_Type::NONE)
         {
@@ -514,8 +592,24 @@ namespace openMVG
           {
             const IndexT indexCam = intrinsic_it.first;
 
-            const std::vector<double> &vec_params = map_intrinsics.at(indexCam);
-            intrinsic_it.second->updateFromParams(vec_params);
+            std::vector<double> &vec_params = map_intrinsics.at(indexCam);
+            //Rolling Shutter
+            // insert readout time at 0
+            if (intrinsic_it.second->getType() == PINHOLE_CAMERA_BROWN_ROLLING)
+            { 
+              double readoutTime = vec_params.at(8);
+              std::cout << "\n" << "##########################################################" << std::endl;
+              std::cout << "readout time after BA : " << readoutTime << std::endl;
+              std::cout << "##########################################################" << std::endl;
+              vec_params.pop_back();
+              intrinsic_it.second->updateReadoutTime(readoutTime);
+            }
+            bool chk = intrinsic_it.second->updateFromParams(vec_params);
+            
+            if(!chk){
+              std::cout << "vec params size" <<vec_params.size()<<std::endl;
+              std::cout<< "update failed" << std::endl;
+              }
           }
         }
 

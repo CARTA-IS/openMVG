@@ -80,8 +80,9 @@ int main(int argc, char **argv)
   std::string sOutDir = "";
   std::pair<std::string,std::string> initialPairString("","");
   std::string sIntrinsic_refinement_options = "ADJUST_ALL";
-  int i_User_camera_model = PINHOLE_CAMERA_RADIAL3;
+  int i_User_camera_model = PINHOLE_CAMERA_BROWN;
   bool b_use_motion_priors = false;
+  bool b_use_rolling_shutter = false;
   int triangulation_method = static_cast<int>(ETriangulationMethod::DEFAULT);
   int resection_method  = static_cast<int>(resection::SolverType::DEFAULT);
 
@@ -96,6 +97,7 @@ int main(int argc, char **argv)
   cmd.add( make_switch('P', "prior_usage") );
   cmd.add( make_option('t', triangulation_method, "triangulation_method"));
   cmd.add( make_option('r', resection_method, "resection_method"));
+  cmd.add( make_switch('R', "rolling_shutter"));
 
   try {
     if (argc == 1) throw std::string("Invalid parameter.");
@@ -128,6 +130,7 @@ int main(int argc, char **argv)
       << "\t ADJUST_PRINCIPAL_POINT|ADJUST_DISTORTION\n"
       <<      "\t\t-> refine the principal point position & the distortion coefficient(s) (if any)\n"
     << "[-P|--prior_usage] Enable usage of motion priors (i.e GPS positions) (default: false)\n"
+    << "[-R|--rolling_shutter] Enable usage of rolling shutter correction (default: false)\n"
     << "[-M|--match_file] path to the match file to use (default=matches.f.txt then matches.f.bin).\n"
     << "[-t|--triangulation_method] triangulation method (default=" << triangulation_method << "):\n"
     << "\t" << static_cast<int>(ETriangulationMethod::DIRECT_LINEAR_TRANSFORM) << ": DIRECT_LINEAR_TRANSFORM\n"
@@ -236,8 +239,21 @@ int main(int argc, char **argv)
   sfmEngine.SetUnknownCameraType(EINTRINSIC(i_User_camera_model));
   b_use_motion_priors = cmd.used('P');
   sfmEngine.Set_Use_Motion_Prior(b_use_motion_priors);
+  b_use_rolling_shutter = cmd.used('R');
+  sfmEngine.Set_Use_Rolling_Shutter(b_use_rolling_shutter);
   sfmEngine.SetTriangulationMethod(static_cast<ETriangulationMethod>(triangulation_method));
   sfmEngine.SetResectionMethod(static_cast<resection::SolverType>(resection_method));
+
+  bool rolling_shutter_option = sfmEngine.Return_Rolling_Shutter_Option();
+  std::string dir = sfmEngine.Return_sOut_directory();
+
+  std::cout << "\n" << "##############################" << std::endl;
+  std::cout << "Camera model option : " << EINTRINSIC(i_User_camera_model) << std::endl;
+  std::cout << "Rolling shutter option : " << std::boolalpha << rolling_shutter_option << std::endl;
+  std::cout << "Output directory : " << dir << std::endl;
+  std::cout << "##############################" << std::endl;
+  
+
 
   // Handle Initial pair parameter
   if (!initialPairString.first.empty() && !initialPairString.second.empty())
@@ -251,7 +267,7 @@ int main(int argc, char **argv)
     }
     sfmEngine.setInitialPair(initialPairIndex);
   }
-
+  
   if (sfmEngine.Process())
   {
     std::cout << std::endl << " Total Ac-Sfm took (s): " << timer.elapsed() << std::endl;

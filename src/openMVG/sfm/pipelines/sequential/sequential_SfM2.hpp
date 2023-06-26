@@ -57,7 +57,7 @@ public:
   bool AddingMissingView(const float & track_inlier_ratio);
 
   /// Adjust intrinsics, landmark and extrinsics according the user config.
-  bool BundleAdjustment();
+  bool BundleAdjustment(bool b_rs=false);
 
   /**
    * Set the default lens distortion type to use if it is declared unknown

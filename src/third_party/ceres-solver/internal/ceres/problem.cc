@@ -31,6 +31,7 @@
 
 #include "ceres/problem.h"
 
+#include <iostream>
 #include <vector>
 #include "ceres/crs_matrix.h"
 #include "ceres/problem_impl.h"

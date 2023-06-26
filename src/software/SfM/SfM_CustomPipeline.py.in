@@ -36,6 +36,7 @@ output_dir = sys.argv[2]
 matches_dir = os.path.join(output_dir, "matches")
 matched_file = os.path.join(matches_dir, "matches.f.bin")
 reconstruction_dir = os.path.join(output_dir, "reconstruction_sequential")
+global_dir = os.path.join(output_dir, "reconstruction_global")
 camera_file_params = os.path.join(CAMERA_SENSOR_WIDTH_DIRECTORY, "sensor_width_camera_database.txt")
 
 print ("Using input dir  : ", input_dir)
@@ -48,7 +49,7 @@ if not os.path.exists(matches_dir):
   os.mkdir(matches_dir)
 if not os.path.exists(matched_file):
   print ("1. Intrinsics analysis")
-  pIntrisics = subprocess.Popen( [os.path.join(OPENMVG_SFM_BIN, "openMVG_main_SfMInit_ImageListing"), "-P" ,"-i", input_dir, "-o", matches_dir, "-d", camera_file_params, "-c", "4", "-m", "1"] )
+  pIntrisics = subprocess.Popen( [os.path.join(OPENMVG_SFM_BIN, "openMVG_main_SfMInit_ImageListing"), "-P" ,"-i", input_dir, "-o", matches_dir, "-d", camera_file_params, "-c", "5", "-m", "1"] )
   pIntrisics.wait()
 
   print ("2. Compute features")
@@ -62,21 +63,18 @@ if not os.path.exists(matched_file):
 # Create the reconstruction if not present
 if not os.path.exists(reconstruction_dir):
     os.mkdir(reconstruction_dir)
+if not os.path.exists(os.path.join(global_dir, "sfm_data.bin")):
+    print ("4. Do Global reconstruction")
+    pRecons = subprocess.Popen( [os.path.join(OPENMVG_SFM_BIN, "openMVG_main_GlobalSfM"),"-P",  "-i", matches_dir+"/sfm_data.json", "-m", matches_dir, "--match_file" ,matched_file, "-o", global_dir] )
+    pRecons.wait()
+    
 
 print ("4. Do Sequential/Incremental reconstruction")
-pRecons = subprocess.Popen( [os.path.join(OPENMVG_SFM_BIN, "openMVG_main_IncrementalSfM"),"-P",  "-i", matches_dir+"/sfm_data.json", "-m", matches_dir, "--match_file" ,matched_file, "-o", reconstruction_dir,"-c","4", "-R"] )
+pRecons = subprocess.Popen( [os.path.join(OPENMVG_SFM_BIN, "openMVG_main_IncrementalSfM2"),"-P",  "-i", global_dir+"/sfm_data.bin", "-m", matches_dir, "--match_file" ,matched_file, "-o", reconstruction_dir,"-c","5","-S", "EXISTING_POSE","-R"] )
 pRecons.wait()
 
 print ("5. Colorize Structure")
 pRecons = subprocess.Popen( [os.path.join(OPENMVG_SFM_BIN, "openMVG_main_ComputeSfM_DataColor"),  "-i", reconstruction_dir+"/sfm_data.bin", "-o", os.path.join(reconstruction_dir,"colorized.ply")] )
-pRecons.wait()
-
-# optional, compute final valid structure from the known camera poses
-print ("6. Structure from Known Poses (robust triangulation)")
-pRecons = subprocess.Popen( [os.path.join(OPENMVG_SFM_BIN, "openMVG_main_ComputeStructureFromKnownPoses"),  "-i", reconstruction_dir+"/sfm_data.bin", "-m", matches_dir, "-f", os.path.join(matches_dir, "matches.f.bin"), "-o", os.path.join(reconstruction_dir,"robust.bin")] )
-pRecons.wait()
-
-pRecons = subprocess.Popen( [os.path.join(OPENMVG_SFM_BIN, "openMVG_main_ComputeSfM_DataColor"),  "-i", reconstruction_dir+"/robust.bin", "-o", os.path.join(reconstruction_dir,"robust_colorized.ply")] )
 pRecons.wait()
 
 

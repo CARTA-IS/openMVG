@@ -100,7 +100,7 @@ private:
   bool Resection(const uint32_t imageIndex);
 
   /// Bundle adjustment to refine Structure; Motion and Intrinsics
-  bool BundleAdjustment();
+  bool BundleAdjustment(bool b_rs=false);
 
   /// Discard track with too large residual error
   bool badTrackRejector(double dPrecision, size_t count = 0);

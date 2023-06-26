@@ -320,6 +320,9 @@ namespace sfm {
     bool b_refine_intrinsic
   )
   {
+    std::cout << "\n" << "##############################" << std::endl;
+    std::cout << "RefinePose"<< std::endl;
+    std::cout << "##############################" << std::endl;
     if (!b_refine_pose && !b_refine_intrinsic)
     {
       // Nothing to do (There is no parameter to refine)
@@ -359,6 +362,68 @@ namespace sfm {
     if (b_BA_Status)
     {
       pose = sfm_data.poses[0];
+      if (b_refine_intrinsic)
+        intrinsics->updateFromParams(shared_intrinsics->getParams());
+    }
+
+    return b_BA_Status;
+  }
+
+    bool SfM_Localizer::RefinePoseRolling
+  (
+    cameras::IntrinsicBase * intrinsics,
+    geometry::Pose3 & pose,
+    geometry::TranslationVelocity & vel,
+    Image_Localizer_Match_Data & matching_data,
+    bool b_refine_pose,
+    bool b_refine_intrinsic
+  )
+  {
+    std::cout << "\n" << "##############################" << std::endl;
+    std::cout << "RefinePoseRolling"<< std::endl;
+    std::cout << "##############################" << std::endl;
+    if (!b_refine_pose && !b_refine_intrinsic)
+    {
+      // Nothing to do (There is no parameter to refine)
+      return false;
+    }
+
+    // Setup a tiny SfM scene with the corresponding 2D-3D data
+    SfM_Data sfm_data;
+    // view
+    sfm_data.views.insert({0, std::make_shared<View>("",0, 0, 0)});
+    // pose
+    sfm_data.poses[0] = pose;
+    sfm_data.velocities[0] = vel;
+    // intrinsic
+    std::shared_ptr<cameras::IntrinsicBase> shared_intrinsics(intrinsics->clone());
+    sfm_data.intrinsics[0] = shared_intrinsics;
+    // structure data (2D-3D correspondences)
+    for (size_t i = 0; i < matching_data.vec_inliers.size(); ++i)
+    {
+      const size_t idx = matching_data.vec_inliers[i];
+      Landmark landmark;
+      landmark.X = matching_data.pt3D.col(idx);
+      landmark.obs[0] = Observation(matching_data.pt2D.col(idx), UndefinedIndexT);
+      sfm_data.structure[i] = std::move(landmark);
+    }
+
+    // Configure BA options (refine the intrinsic and the pose parameter only if requested)
+    const Optimize_Options ba_refine_options
+    (
+      (b_refine_intrinsic) ? cameras::Intrinsic_Parameter_Type::ADJUST_ALL : cameras::Intrinsic_Parameter_Type::NONE,
+      (b_refine_pose) ? Extrinsic_Parameter_Type::ADJUST_ROLLING : Extrinsic_Parameter_Type::NONE,
+      Structure_Parameter_Type::NONE, // STRUCTURE must remain constant
+      Control_Point_Parameter()
+    );
+    Bundle_Adjustment_Ceres bundle_adjustment_obj;
+    const bool b_BA_Status = bundle_adjustment_obj.Adjust(
+      sfm_data,
+      ba_refine_options);
+    if (b_BA_Status)
+    {
+      pose = sfm_data.poses[0];
+      vel = sfm_data.velocities[0];
       if (b_refine_intrinsic)
         intrinsics->updateFromParams(shared_intrinsics->getParams());
     }

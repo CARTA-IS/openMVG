@@ -56,8 +56,12 @@ bool track_triangulation
     std::vector<Vec3> bearing;
     std::vector<Mat34> poses;
     std::vector<Pose3> poses_;
+    //std::vector<TranslationVelocity> velocities;
+    std::vector<Vec3> rs_ts;
+
     bearing.reserve(obs.size());
     poses.reserve(obs.size());
+    rs_ts.reserve(obs.size());
     for (const auto& observation : obs)
     {
       const View * view = sfm_data.views.at(observation.first).get();
@@ -65,9 +69,31 @@ bool track_triangulation
         return false;
       const IntrinsicBase * cam = sfm_data.GetIntrinsics().at(view->id_intrinsic).get();
       const Pose3 pose = sfm_data.GetPoseOrDie(view);
+      //Rolling Shutter
+      TranslationVelocity vel;
+      try
+      {
+        vel.SetVelocity(sfm_data.GetVelocities().at(view->id_pose).velocity());
+      }
+      catch (std::out_of_range& e)
+      {
+        ;//std::cout << view->id_pose <<" pose id is not exist!" << std::endl;
+      }
+      const Vec2 x_ud = cam->get_ud_pixel(observation.second.x);
+      openMVG::Vec3 rs_translation = pose.translation()- pose.rotation()* ((cam->t()/ ( view->ui_height))* (x_ud[1]) * vel.velocity());
+      Mat34 poseMat = pose.asMatrix(); 
+      //std::cout <<"test " << std::endl;
+      //std::cout <<"pose " << poseMat <<std::endl;
+      //std::cout <<"rs_translation " << rs_translation <<std::endl;
+      poseMat.col(3) = rs_translation; // Rolling shutter translation change
+      //std::cout << "pose " << poseMat << std::endl;
+
       bearing.emplace_back((*cam)(cam->get_ud_pixel(observation.second.x)));
-      poses.emplace_back(pose.asMatrix());
+      poses.emplace_back(poseMat);
+      rs_ts.emplace_back(rs_translation);
+      //velocities.emplace_back(vel);
       poses_.emplace_back(pose);
+      
     }
     if (bearing.size() > 2)
     {
@@ -88,10 +114,10 @@ bool track_triangulation
       return Triangulate2View
       (
         poses_.front().rotation(),
-        poses_.front().translation(),
+        rs_ts.front(), //poses_.front().translation(),
         bearing.front(),
         poses_.back().rotation(),
-        poses_.back().translation(),
+        rs_ts.back(), //poses_.back().translation(),
         bearing.back(),
         X,
         etri_method
@@ -114,7 +140,8 @@ bool track_check_predicate
     const IntrinsicBase&,
     const Pose3&,
     const Vec2&,
-    const Vec3&)> predicate
+    const Vec3&,
+    const TranslationVelocity&)> predicate
 )
 {
   bool visibility = false; // assume that no observation has been looked yet
@@ -126,7 +153,17 @@ bool track_check_predicate
     visibility = true; // at least an observation is evaluated
     const IntrinsicBase * cam = sfm_data.intrinsics.at(view->id_intrinsic).get();
     const Pose3 pose = sfm_data.GetPoseOrDie(view);
-    if (!predicate(*cam, pose, obs_it.second.x, X))
+    //Rolling Shutter
+    TranslationVelocity vel;
+    try
+    {
+      vel.SetVelocity(sfm_data.GetVelocities().at(view->id_pose).velocity());
+    }
+    catch (std::out_of_range& e)
+    {
+      ;//std::cout << view->id_pose <<" pose id is not exist!" << std::endl;
+    }
+    if (!predicate(*cam, pose, obs_it.second.x, X, vel))
       return false;
   }
   return visibility;
@@ -137,7 +174,8 @@ bool cheirality_predicate
   const IntrinsicBase& cam,
   const Pose3& pose,
   const Vec2& x,
-  const Vec3& X
+  const Vec3& X,
+  const TranslationVelocity& vel
 )
 {
   return CheiralityTest(cam(x), pose, X);
@@ -155,10 +193,15 @@ struct ResidualAndCheiralityPredicate
     const IntrinsicBase& cam,
     const Pose3& pose,
     const Vec2& x,
-    const Vec3& X
+    const Vec3& X,
+    const TranslationVelocity& vel
   )
   {
-    const Vec2 residual = cam.residual(pose(X), x);
+    //Rolling Shutter
+    openMVG::Vec3 rs_translation = pose.translation() - pose.rotation() * ((cam.t()/(cam.h())) * x[1] * vel.velocity()); 
+    openMVG::Vec3 normx = pose.rotation() * X + rs_translation;
+              
+    const Vec2 residual = cam.residual(normx ,x);// pose(X), x);
     return CheiralityTest(cam(x), pose, X) &&
            residual.squaredNorm() < squared_pixel_threshold_;
   }
@@ -341,7 +384,8 @@ const
                                      std::placeholders::_1,
                                      std::placeholders::_2,
                                      std::placeholders::_3,
-                                     std::placeholders::_4);
+                                     std::placeholders::_4,
+                                     std::placeholders::_5);
 
   // Handle the case where all observations must be used
   if (min_required_inliers_ == min_sample_index_ &&
@@ -402,7 +446,21 @@ const
       const Pose3 pose = sfm_data.GetPoseOrDie(view);
       if (!CheiralityTest(cam(obs_it.second.x), pose, X))
         continue;
-      const double residual_sq = cam.residual(pose(X), obs_it.second.x).squaredNorm();
+      //Rolling Shutter
+      TranslationVelocity vel;
+      try
+      {
+        vel.SetVelocity(sfm_data.GetVelocities().at(view->id_pose).velocity());
+      }
+      catch (std::out_of_range& e)
+      {
+        ;//std::cout << view->id_pose <<" pose id is not exist!" << std::endl;
+      }
+      openMVG::Vec3 rs_translation = pose.translation() - pose.rotation() * ((cam.t()/(view->ui_height)) * (obs_it.second.x[1]) * vel.velocity()); 
+      openMVG::Vec3 normx = pose.rotation() * X + rs_translation;
+              
+
+      const double residual_sq = cam.residual(normx ,obs_it.second.x).squaredNorm();//pose(X), obs_it.second.x).squaredNorm();
       if (residual_sq < dSquared_pixel_threshold)
       {
         inlier_set.push_front(obs_it.first);

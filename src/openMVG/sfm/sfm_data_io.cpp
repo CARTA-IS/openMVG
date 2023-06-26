@@ -37,9 +37,16 @@ bool ValidIds(const SfM_Data & sfm_data, ESfM_Data flags_part)
   transform(sfm_data.GetPoses().begin(), sfm_data.GetPoses().end(),
     std::inserter(set_id_extrinsics, set_id_extrinsics.begin()), stl::RetrieveKey());
 
+  std::set<IndexT> set_id_velocities; //unique so can use a set
+  transform(sfm_data.GetPoses().begin(), sfm_data.GetPoses().end(),
+    std::inserter(set_id_velocities, set_id_velocities.begin()), stl::RetrieveKey());
+
+
   // Collect existing id_intrinsic && id_extrinsic from views
   std::set<IndexT> reallyDefined_id_intrinsics;
   std::set<IndexT> reallyDefined_id_extrinsics;
+  std::set<IndexT> reallyDefined_id_velocities;
+  
   for (Views::const_iterator iter = sfm_data.GetViews().begin();
     iter != sfm_data.GetViews().end();
     ++iter)
@@ -51,6 +58,8 @@ bool ValidIds(const SfM_Data & sfm_data, ESfM_Data flags_part)
 
     if (set_id_extrinsics.count(id_pose))
       reallyDefined_id_extrinsics.insert(id_pose); //at least it exists
+    if (set_id_velocities.count(id_pose))
+      reallyDefined_id_velocities.insert(id_pose); //at least it exists
 
     if (set_id_intrinsics.count(id_intrinsic))
       reallyDefined_id_intrinsics.insert(id_intrinsic); //at least it exists

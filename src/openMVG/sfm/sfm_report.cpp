@@ -70,6 +70,7 @@ bool Generate_SfM_Report
   os
     << " #views: " << sfm_data.GetViews().size() << sNewLine
     << " #poses: " << sfm_data.GetPoses().size() << sNewLine
+    << " #velocities: " << sfm_data.GetVelocities().size() << sNewLine
     << " #intrinsics: " << sfm_data.GetIntrinsics().size() << sNewLine
     << " #tracks: " << sfm_data.GetLandmarks().size() << sNewLine
     << " #residuals: " << residualCount << sNewLine;

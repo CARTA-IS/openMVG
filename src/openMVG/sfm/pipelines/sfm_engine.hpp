@@ -31,7 +31,8 @@ public:
   :sOut_directory_(soutDirectory),
     sfm_data_(sfm_data),
     intrinsic_refinement_options_(cameras::Intrinsic_Parameter_Type::ADJUST_ALL),
-    b_use_motion_prior_(false)
+    b_use_motion_prior_(false),
+    b_use_rolling_shutter_(false)
   {
   }
 
@@ -60,6 +61,24 @@ public:
     b_use_motion_prior_ = rhs;
   }
 
+  void Set_Use_Rolling_Shutter
+  (
+    bool rhs
+  )
+  {
+    b_use_rolling_shutter_ = rhs;
+  }
+
+  bool Return_Rolling_Shutter_Option()
+  {
+    return b_use_rolling_shutter_;
+  }
+
+  std::string Return_sOut_directory()
+  {
+    return sOut_directory_;
+  } 
+
   const SfM_Data & Get_SfM_Data() const {return sfm_data_;}
 
 protected:
@@ -75,6 +94,7 @@ protected:
   //-----
   cameras::Intrinsic_Parameter_Type intrinsic_refinement_options_;
   bool b_use_motion_prior_;
+  bool b_use_rolling_shutter_;
 };
 
 } // namespace sfm

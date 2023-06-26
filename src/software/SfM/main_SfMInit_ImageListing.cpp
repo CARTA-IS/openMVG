@@ -183,6 +183,7 @@ int main(int argc, char **argv)
               << "\t" << static_cast<int>(PINHOLE_CAMERA_RADIAL1) << ": Pinhole radial 1\n"
               << "\t" << static_cast<int>(PINHOLE_CAMERA_RADIAL3) << ": Pinhole radial 3 (default)\n"
               << "\t" << static_cast<int>(PINHOLE_CAMERA_BROWN) << ": Pinhole brown 2\n"
+              << "\t" << static_cast<int>(PINHOLE_CAMERA_BROWN_ROLLING) << ": Pinhole brown 2 Rolling\n"
               << "\t" << static_cast<int>(PINHOLE_CAMERA_FISHEYE) << ": Pinhole with a simple Fish-eye distortion\n"
               << "\t" << static_cast<int>(CAMERA_SPHERICAL) << ": Spherical camera\n"
               << "[-g|--group_camera_model]\n"
@@ -394,6 +395,10 @@ int main(int argc, char **argv)
       case PINHOLE_CAMERA_BROWN:
         intrinsic = std::make_shared<Pinhole_Intrinsic_Brown_T2>(width, height, focal, ppx, ppy, 0.0, 0.0, 0.0, 0.0, 0.0); // setup no distortion as initial guess
         break;
+      case PINHOLE_CAMERA_BROWN_ROLLING:
+        intrinsic = std::make_shared<Pinhole_Intrinsic_Brown_T2_Rolling>(width, height, focal, ppx, ppy, 0.0, 0.0, 0.0, 0.0, 0.0); // setup no distortion as initial guess
+        break;
+      
       case PINHOLE_CAMERA_FISHEYE:
         intrinsic = std::make_shared<Pinhole_Intrinsic_Fisheye>(width, height, focal, ppx, ppy, 0.0, 0.0, 0.0, 0.0); // setup no distortion as initial guess
         break;
