@@ -24,6 +24,8 @@
 #include "openMVG/sfm/sfm_data_transform.hpp"
 #include "openMVG/sfm/sfm_data.hpp"
 #include "openMVG/types.hpp"
+//3d gcp residual
+#include "openMVG/multiview/triangulation_nview.hpp"
 
 #include <ceres/rotation.h>
 #include <ceres/types.h>
@@ -153,7 +155,95 @@ namespace openMVG
     {
       return ceres_options_;
     }
+    /************************************************************************/
+    struct GCP3DResidual {
+      GCP3DResidual(
+        const std::vector<IndexT>           &view_ids,
+        const std::vector<Vec2>             &pixels,
+        const SfM_Data                      &sfm_data,
+        const Vec3                          &gt_point,
+        const Vec3                          &weight,
+        const std::function<const double*(IndexT)> &get_pose_ptr_fn,
+        const Vec3                          &centroid,
+        double                                inv_avg_dist)
+        : view_ids_(view_ids)
+        , pixels_(pixels)
+        , sfm_data_(sfm_data)
+        , gt_point_(gt_point)
+        , weight_(weight)
+        , get_pose_ptr_fn_(get_pose_ptr_fn)
+        , centroid_(centroid)
+        , inv_avg_dist_(inv_avg_dist)
+      {}
 
+      template <typename T>
+      bool operator()(T const* const* /*poses*/, T* residuals) const {
+        const size_t N = view_ids_.size();
+        if (N < 2) {
+          // 관측이 부족하면 잔차를 0으로
+          residuals[0] = residuals[1] = residuals[2] = T(0);
+          return true;
+        }
+
+        // Bearings & normalized poses
+        std::vector<Eigen::Matrix<T,3,1>> bearings; bearings.reserve(N);
+        std::vector<Eigen::Matrix<T,3,4>> poses;    poses.reserve(N);
+        Eigen::Matrix<T,3,3> normal_equation_matrix = Eigen::Matrix<T,3,3>::Zero();
+        Eigen::Matrix<T,3,1> normal_equation_vector = Eigen::Matrix<T,3,1>::Zero();
+        for (size_t i = 0; i < N; ++i) {
+          const IndexT vid = view_ids_[i];
+          const Vec2   pix = pixels_[i];
+
+          // undistort → bearing
+          auto intr_ptr = sfm_data_
+            .GetIntrinsics()
+            .at(sfm_data_.views.at(vid)->id_intrinsic);
+          Vec2 ud = intr_ptr->get_ud_pixel(pix);
+          Vec3 b  = (*intr_ptr)(ud);
+          bearings[i] = b.cast<T>();
+
+          // normalized pose
+          const double* p = get_pose_ptr_fn_(vid);
+          Eigen::Matrix<T,3,1> aa;
+          aa << T(p[0]), T(p[1]), T(p[2]);
+          Eigen::Matrix<T,3,1> tt;
+          tt << T(p[3]), T(p[4]), T(p[5]);
+          T theta = aa.norm();
+          Eigen::Matrix<T,3,3> R = (theta==T(0))
+            ? Eigen::Matrix<T,3,3>::Identity()
+            : Eigen::AngleAxis<T>(theta, aa/theta).toRotationMatrix();
+          Eigen::Matrix<T,3,1> d = R * b.cast<T>();
+
+          // 3) camera center C = -R^T * t
+          Eigen::Matrix<T,3,1> C = -R.transpose() * tt;
+
+          // 4) Projection matrix P = I - d d^T
+          Eigen::Matrix<T,3,3> P = Eigen::Matrix<T,3,3>::Identity()
+                                  - d * d.transpose();
+
+          // 5) 축적
+          normal_equation_matrix += P;
+          normal_equation_vector += P * C;
+        }
+
+        // 6) 해 구하기: X = M^{-1} v
+        Eigen::Matrix<T,3,1> X_world = normal_equation_matrix.inverse() * normal_equation_vector;
+        Eigen::Matrix<T,3,1> diff = X_world - gt_point_.cast<T>();
+        residuals[0] = T(weight_[0]) * diff[0];
+        residuals[1] = T(weight_[1]) * diff[1];
+        residuals[2] = T(weight_[2]) * diff[2];
+        return true;
+      }
+      const std::vector<IndexT>               view_ids_;
+      const std::vector<Vec2>                 pixels_;
+      const SfM_Data                         &sfm_data_;
+      const Vec3                              gt_point_;
+      const Vec3                              weight_;
+      const std::function<const double*(IndexT)> get_pose_ptr_fn_;
+      const Vec3                              centroid_;
+      const double                            inv_avg_dist_;
+    };
+    /************************************************************************/
     bool Bundle_Adjustment_Ceres::Adjust(
         SfM_Data &sfm_data, // the SfM scene to refine
         const Optimize_Options &options)
@@ -362,7 +452,7 @@ namespace openMVG
         if (options.structure_opt == Structure_Parameter_Type::NONE)
           problem.SetParameterBlockConstant(structure_landmark_it.second.X.data());
       }
-
+      
       if (options.control_point_opt.bUse_control_points)
       {
         // Use Ground Control Point:
@@ -416,6 +506,86 @@ namespace openMVG
             problem.SetParameterBlockConstant(gcp_landmark_it.second.X.data());
           }
         }
+
+        // std::map<IndexT, Vec3> map_triangulated = TriangulateControlPoints(sfm_data);
+        // std::cout << "map_triangulated size_zweight : " << map_triangulated.size() << std::endl;
+
+        // Setup triangulated GCPs as parameters and add residual blocks
+        std::cout << "[CHECK] Residual count: " << problem.NumResidualBlocks() << std::endl;
+        std::cout << "[CHECK] Parameter block count: " << problem.NumParameterBlocks() << std::endl;
+        // 3D GCP
+        Vec3 centroid = Vec3::Zero();
+        const auto & cps = sfm_data.control_points;
+        const int num_cps = int(cps.size());
+        for (auto const & cp_pair : cps) {
+          centroid += cp_pair.second.X;
+        }
+        centroid /= static_cast<double>(num_cps);
+
+        double avg_dist = 0.0;
+        for (auto const & cp_pair : cps) {
+          avg_dist += (cp_pair.second.X - centroid).norm();
+        }
+        avg_dist /= double(num_cps);
+
+        // 역수만 저장해 두면 Residual 내부에서 곱하기만 하면 됩니다.
+        double inv_avg_dist = 1.0 / avg_dist;
+
+        // ——————————————————————————————
+        // (C) GCP별 관측(view_ids, pixels) 수집 & Residual 블록 준비
+        // ——————————————————————————————
+        for (auto const & cp_pair : cps) {
+          IndexT cp_id      = cp_pair.first;
+          const auto & landmark   = cp_pair.second;
+
+          // C-1) view_ids, pixels 모으기
+          std::vector<IndexT> view_ids;
+          std::vector<Vec2>   pixels;
+          view_ids.reserve(landmark.obs.size());
+          pixels  .reserve(landmark.obs.size());
+          for (auto const & obs : landmark.obs) {
+            view_ids.push_back(obs.first);
+            pixels  .push_back(obs.second.x);
+          }
+
+          // 관측이 2개 미만이면 삼각측량 불가 → 건너뜀
+          if (view_ids.size() < 2) 
+            continue;
+
+          // Residual functor 생성
+          auto get_pose_ptr = [&](IndexT vid) -> const double* {
+            return &map_poses.at(vid)[0];
+          };
+          auto* functor = new GCP3DResidual(
+              view_ids, pixels,
+              sfm_data,
+              landmark.X,               // gt_point
+              Vec3(1,1,1),             // weight
+              get_pose_ptr,
+              centroid,
+              inv_avg_dist);
+
+          // C-3) DynamicAutoDiffCostFunction 설정
+          auto* cost_fn = new ceres::DynamicAutoDiffCostFunction<
+              GCP3DResidual,
+              3>(functor);
+          for (size_t i = 0; i < view_ids.size(); ++i)
+            cost_fn->AddParameterBlock(6);
+          cost_fn->SetNumResiduals(3);
+
+          // C-4) parameter block 포인터 모아서 등록
+          std::vector<double*> param_blocks;
+          param_blocks.reserve(view_ids.size());
+          for (auto vid : view_ids)
+            param_blocks.push_back(&map_poses.at(vid)[0]);
+
+          problem.AddResidualBlock(
+              cost_fn,
+              new ceres::HuberLoss(1.0),
+              param_blocks);
+        }
+        std::cout << "[CHECK] Residual count: " << problem.NumResidualBlocks() << std::endl;
+        std::cout << "[CHECK] Parameter block count: " << problem.NumParameterBlocks() << std::endl;
       }
 
       // Add Pose prior constraints if any
@@ -439,7 +609,6 @@ namespace openMVG
           }
         }
       }
-
       // Configure a BA engine and run it
       //  Make Ceres automatically detect the bundle structure.
       ceres::Solver::Options ceres_config_options;
@@ -451,19 +620,17 @@ namespace openMVG
       ceres_config_options.sparse_linear_algebra_library_type =
           static_cast<ceres::SparseLinearAlgebraLibraryType>(ceres_options_.sparse_linear_algebra_library_type_);
       ceres_config_options.minimizer_progress_to_stdout = ceres_options_.bVerbose_;
-      ceres_config_options.logging_type = ceres::SILENT;
+      // ceres_config_options.logging_type = ceres::PER_MINIMIZER_ITERATION; //SILENT
       ceres_config_options.num_threads = ceres_options_.nb_threads_;
 #if CERES_VERSION_MAJOR < 2
       ceres_config_options.num_linear_solver_threads = ceres_options_.nb_threads_;
 #endif
       ceres_config_options.parameter_tolerance = ceres_options_.parameter_tolerance_;
-
       // Solve BA
       ceres::Solver::Summary summary;
       ceres::Solve(ceres_config_options, &problem, &summary);
       if (ceres_options_.bCeres_summary_)
         std::cout << summary.FullReport() << std::endl;
-
       // If no error, get back refined parameters
       if (!summary.IsSolutionUsable())
       {
@@ -471,6 +638,7 @@ namespace openMVG
           std::cout << "Bundle Adjustment failed." << std::endl;
         return false;
       }
+      
       else // Solution is usable
       {
         if (ceres_options_.bVerbose_)
