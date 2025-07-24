@@ -156,6 +156,48 @@ namespace openMVG
       return ceres_options_;
     }
     /************************************************************************/
+    // skew‐symmetric matrix for cross(b,·)
+    template <typename T>
+    Eigen::Matrix<T,3,3> Skew(const Eigen::Matrix<T,3,1>& b) {
+      Eigen::Matrix<T,3,3> m;
+      m <<    T(0),  -b[2],   b[1],
+            b[2],    T(0),  -b[0],
+            -b[1],   b[0],    T(0);
+      return m;
+    }
+
+    // Jet<T> 호환 Algebraic N‑View Triangulation
+    template <typename T>
+    Eigen::Matrix<T,3,1> TriangulateAlgebraicJet(
+        const std::vector<Eigen::Matrix<T,3,1>>& bearings,
+        const std::vector<Eigen::Matrix<T,3,4>>& poses) {
+      const int N = int(bearings.size());
+      // A X = -b  (3N×3) · (3×1) = (3N×1)
+      Eigen::Matrix<T, Eigen::Dynamic, 3> A(3*N, 3);
+      Eigen::Matrix<T, Eigen::Dynamic, 1> b_vec(3*N);
+
+      for (int i = 0; i < N; ++i) {
+        // ① cross(b_i, R_i X + t_i) = 0  ⇒  skew(b_i)*R_i * X = -skew(b_i)*t_i
+        auto& bi = bearings[i];
+        const auto& P = poses[i];
+        auto Ri = P.template block<3,3>(0,0);
+        auto ti = P.template block<3,1>(0,3);
+
+        Eigen::Matrix<T,3,3> Bi = Skew(bi);
+        // fill A, b_vec
+        A.template block<3,3>(3*i,0) = Bi * Ri;
+        b_vec.template segment<3>(3*i)  = -Bi * ti;
+      }
+
+      // normal equations: (AᵀA) X = Aᵀ b_vec
+      Eigen::Matrix<T,3,3> AtA = A.template transpose() * A;
+      Eigen::Matrix<T,3,1> Atb = A.template transpose() * b_vec;
+
+      // solve X = (AtA)^{-1} Atb
+      // return AtA.ldlt().solve(Atb);
+      return AtA.inverse() * Atb;
+    }
+
     struct GCP3DResidual {
       GCP3DResidual(
         const std::vector<IndexT>           &view_ids,
@@ -177,58 +219,46 @@ namespace openMVG
       {}
 
       template <typename T>
-      bool operator()(T const* const* /*poses*/, T* residuals) const {
-        const size_t N = view_ids_.size();
+      bool operator()(T const* const* /*unused*/, T* residuals) const {
+        const int N = int(view_ids_.size());
         if (N < 2) {
-          // 관측이 부족하면 잔차를 0으로
           residuals[0] = residuals[1] = residuals[2] = T(0);
           return true;
         }
 
-        // Bearings & normalized poses
-        std::vector<Eigen::Matrix<T,3,1>> bearings; bearings.reserve(N);
-        std::vector<Eigen::Matrix<T,3,4>> poses;    poses.reserve(N);
-        Eigen::Matrix<T,3,3> normal_equation_matrix = Eigen::Matrix<T,3,3>::Zero();
-        Eigen::Matrix<T,3,1> normal_equation_vector = Eigen::Matrix<T,3,1>::Zero();
-        for (size_t i = 0; i < N; ++i) {
-          const IndexT vid = view_ids_[i];
-          const Vec2   pix = pixels_[i];
-
-          // undistort → bearing
-          auto intr_ptr = sfm_data_
+        // (1) Bearings & normalized poses (값만 T로 변환)
+        std::vector<Eigen::Matrix<T,3,1>>   bearings_T(N);
+        std::vector<Eigen::Matrix<T,3,4>>   poses_T   (N);
+        for (int i = 0; i < N; ++i) {
+          // undistort→bearing (double) → cast<T>
+          auto intr = sfm_data_
             .GetIntrinsics()
-            .at(sfm_data_.views.at(vid)->id_intrinsic);
-          Vec2 ud = intr_ptr->get_ud_pixel(pix);
-          Vec3 b  = (*intr_ptr)(ud);
-          bearings[i] = b.cast<T>();
+            .at(sfm_data_.views.at(view_ids_[i])->id_intrinsic);
+          Vec2 ud = intr->get_ud_pixel(pixels_[i]);
+          bearings_T[i] = (*intr)(ud).cast<T>();
 
-          // normalized pose
-          const double* p = get_pose_ptr_fn_(vid);
-          Eigen::Matrix<T,3,1> aa;
-          aa << T(p[0]), T(p[1]), T(p[2]);
-          Eigen::Matrix<T,3,1> tt;
-          tt << T(p[3]), T(p[4]), T(p[5]);
+          // get_pose_ptr_fn_ 으로부터 angle‐axis + translation
+          const double* p = get_pose_ptr_fn_(view_ids_[i]);
+          Eigen::Matrix<T,3,1> aa; aa << T(p[0]),T(p[1]),T(p[2]);
+          Eigen::Matrix<T,3,1> tt; tt << T(p[3]),T(p[4]),T(p[5]);
           T theta = aa.norm();
-          Eigen::Matrix<T,3,3> R = (theta==T(0))
+          Eigen::Matrix<T,3,3> R =
+            (theta==T(0))
             ? Eigen::Matrix<T,3,3>::Identity()
             : Eigen::AngleAxis<T>(theta, aa/theta).toRotationMatrix();
-          Eigen::Matrix<T,3,1> d = R * b.cast<T>();
-
-          // 3) camera center C = -R^T * t
-          Eigen::Matrix<T,3,1> C = -R.transpose() * tt;
-
-          // 4) Projection matrix P = I - d d^T
-          Eigen::Matrix<T,3,3> P = Eigen::Matrix<T,3,3>::Identity()
-                                  - d * d.transpose();
-
-          // 5) 축적
-          normal_equation_matrix += P;
-          normal_equation_vector += P * C;
+          // world→camera: X_cam = R*X + t
+          Eigen::Matrix<T,3,4> P;
+          P.template block<3,3>(0,0) = R;
+          P.template block<3,1>(0,3) =  tt;
+          poses_T[i] = P;
         }
 
-        // 6) 해 구하기: X = M^{-1} v
-        Eigen::Matrix<T,3,1> X_world = normal_equation_matrix.inverse() * normal_equation_vector;
-        Eigen::Matrix<T,3,1> diff = X_world - gt_point_.cast<T>();
+        // (2) Algebraic triangulation
+        Eigen::Matrix<T,3,1> X_est =
+          TriangulateAlgebraicJet<T>(bearings_T, poses_T);
+
+        // (3) residual = weight ∘ (X_est - gt_point)
+        Eigen::Matrix<T,3,1> diff = X_est - gt_point_.cast<T>();
         residuals[0] = T(weight_[0]) * diff[0];
         residuals[1] = T(weight_[1]) * diff[1];
         residuals[2] = T(weight_[2]) * diff[2];
@@ -560,7 +590,7 @@ namespace openMVG
               view_ids, pixels,
               sfm_data,
               landmark.X,               // gt_point
-              Vec3(1,1,1),             // weight
+              Vec3(1,1,100),             // weight
               get_pose_ptr,
               centroid,
               inv_avg_dist);
