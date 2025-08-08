@@ -155,7 +155,7 @@ namespace openMVG
     {
       return ceres_options_;
     }
-    /************************************************************************/
+    
     // skew‐symmetric matrix for cross(b,·)
     template <typename T>
     Eigen::Matrix<T,3,3> Skew(const Eigen::Matrix<T,3,1>& b) {
@@ -166,7 +166,7 @@ namespace openMVG
       return m;
     }
 
-    // Jet<T> 호환 Algebraic N‑View Triangulation
+    // Jet<T> Algebraic N‑View Triangulation
     template <typename T>
     Eigen::Matrix<T,3,1> TriangulateAlgebraicJet(
         const std::vector<Eigen::Matrix<T,3,1>>& bearings,
@@ -177,7 +177,7 @@ namespace openMVG
       Eigen::Matrix<T, Eigen::Dynamic, 1> b_vec(3*N);
 
       for (int i = 0; i < N; ++i) {
-        // ① cross(b_i, R_i X + t_i) = 0  ⇒  skew(b_i)*R_i * X = -skew(b_i)*t_i
+        // cross(b_i, R_i X + t_i) = 0  ⇒  skew(b_i)*R_i * X = -skew(b_i)*t_i
         auto& bi = bearings[i];
         const auto& P = poses[i];
         auto Ri = P.template block<3,3>(0,0);
@@ -226,18 +226,18 @@ namespace openMVG
           return true;
         }
 
-        // (1) Bearings & normalized poses (값만 T로 변환)
+        // Bearings & normalized poses
         std::vector<Eigen::Matrix<T,3,1>>   bearings_T(N);
         std::vector<Eigen::Matrix<T,3,4>>   poses_T   (N);
         for (int i = 0; i < N; ++i) {
-          // undistort→bearing (double) → cast<T>
+          // undistort → bearing(double) → cast<T>
           auto intr = sfm_data_
             .GetIntrinsics()
             .at(sfm_data_.views.at(view_ids_[i])->id_intrinsic);
           Vec2 ud = intr->get_ud_pixel(pixels_[i]);
           bearings_T[i] = (*intr)(ud).cast<T>();
 
-          // get_pose_ptr_fn_ 으로부터 angle‐axis + translation
+          // angle‐axis + translation from get_pose_ptr_fn_
           const double* p = get_pose_ptr_fn_(view_ids_[i]);
           Eigen::Matrix<T,3,1> aa; aa << T(p[0]),T(p[1]),T(p[2]);
           Eigen::Matrix<T,3,1> tt; tt << T(p[3]),T(p[4]),T(p[5]);
@@ -246,18 +246,18 @@ namespace openMVG
             (theta==T(0))
             ? Eigen::Matrix<T,3,3>::Identity()
             : Eigen::AngleAxis<T>(theta, aa/theta).toRotationMatrix();
-          // world→camera: X_cam = R*X + t
+          // world → camera: X_cam = R*X + t
           Eigen::Matrix<T,3,4> P;
           P.template block<3,3>(0,0) = R;
           P.template block<3,1>(0,3) =  tt;
           poses_T[i] = P;
         }
 
-        // (2) Algebraic triangulation
+        // Algebraic triangulation
         Eigen::Matrix<T,3,1> X_est =
           TriangulateAlgebraicJet<T>(bearings_T, poses_T);
 
-        // (3) residual = weight ∘ (X_est - gt_point)
+        // residual = weight ∘ (X_est - gt_point)
         Eigen::Matrix<T,3,1> diff = X_est - gt_point_.cast<T>();
         residuals[0] = T(weight_[0]) * diff[0];
         residuals[1] = T(weight_[1]) * diff[1];
@@ -273,7 +273,142 @@ namespace openMVG
       const Vec3                              centroid_;
       const double                            inv_avg_dist_;
     };
-    /************************************************************************/
+    // GCP i, j 사이 원래 거리를 보존하는 residual
+    struct GCPPairwiseResidual {
+      GCPPairwiseResidual(double dij_gt, double weight)
+        : dij_gt_(dij_gt), w_(weight) {}
+
+      template <typename T>
+      bool operator()(const T* const Xi,  // [X,Y,Z] of GCP i
+                      const T* const Xj,  // [X,Y,Z] of GCP j
+                      T* residual) const {
+        // 차벡터
+        T dx = Xi[0] - Xj[0];
+        T dy = Xi[1] - Xj[1];
+        T dz = Xi[2] - Xj[2];
+        // 거리
+        T dist = ceres::sqrt(dx*dx + dy*dy + dz*dz);
+        // 원래 거리와의 차이에 weight
+        residual[0] = T(w_) * (dist - T(dij_gt_));
+        return true;
+      }
+
+      double dij_gt_;  // ground-truth distance between i and j
+      double w_;       // weight for this constraint
+    };
+    struct TriangulationResidual {
+      TriangulationResidual(
+          const std::vector<IndexT>& view_ids,
+          const std::vector<Vec2>& pixels,
+          const SfM_Data& sfm_data,
+          const std::function<const double*(IndexT)>& get_pose_ptr,
+          const Vec3& centroid,
+          double inv_avg_dist)
+        : view_ids_(view_ids)
+        , pixels_(pixels)
+        , sfm_data_(sfm_data)
+        , get_pose_ptr_(get_pose_ptr)
+        , centroid_(centroid)
+        , inv_avg_dist_(inv_avg_dist)
+      {}
+
+      template <typename T>
+      bool operator()(T const* const* parameters,
+                      T* residuals) const {
+        const size_t N = view_ids_.size();
+        
+        // 1) 각 뷰에 대한 bearing 및 투영 행렬 구성
+        std::vector<Eigen::Matrix<T,3,1>> bearings; bearings.reserve(N);
+        std::vector<Eigen::Matrix<T,3,4>> Pn;       Pn.reserve(N);
+        for (size_t i = 0; i < N; ++i) {
+          IndexT vid = view_ids_[i];
+          
+          // Intrinsics -> pixel to bearing
+          const auto* cam = dynamic_cast<const cameras::Pinhole_Intrinsic*>(
+            sfm_data_.GetIntrinsics().at(
+              sfm_data_.views.at(vid)->id_intrinsic).get());
+          Vec2 undist = cam->get_ud_pixel(pixels_[i]);
+          auto b3 = (*cam)(undist);
+          bearings.emplace_back(b3.template cast<T>());
+
+          // Pose parameters (6 DOF)
+          const T* p6 = parameters[i];  // 0..5
+          Eigen::Matrix<T,3,1> axis(p6[0], p6[1], p6[2]);
+          Eigen::Matrix<T,3,1> trans(p6[3], p6[4], p6[5]);
+          T theta = axis.norm();
+          Eigen::Matrix<T,3,3> R = (theta == T(0))
+            ? Eigen::Matrix<T,3,3>::Identity()
+            : Eigen::AngleAxis<T>(theta, axis / theta).toRotationMatrix();
+
+          Eigen::Matrix<T,3,4> Pni;
+          Pni.template block<3,3>(0,0) = R;
+          // translation 조정: centroid & inv_avg_dist
+          Pni.template block<3,1>(0,3) = 
+            (trans + R * centroid_.template cast<T>()) * T(inv_avg_dist_);
+          Pn.emplace_back(Pni);
+        }
+
+        // 2) 3D 점 파라미터 추출
+        const T* x_ptr = parameters[N];  // parameters[N][0..2]
+        Eigen::Matrix<T,3,1> X_param;
+        X_param << x_ptr[0], x_ptr[1], x_ptr[2];
+
+        // 3) Algebraic Jet Triangulation
+        Eigen::Matrix<T,3,1> X_triang = 
+          TriangulateAlgebraicJet<T>(bearings, Pn);
+
+        // 4) Residual 계산
+        residuals[0] = X_triang[0] - X_param[0];
+        residuals[1] = X_triang[1] - X_param[1];
+        residuals[2] = X_triang[2] - X_param[2];
+        return true;
+      }
+
+      // helper: cost function 생성
+      static ceres::CostFunction* Create(
+          const std::vector<IndexT>& view_ids,
+          const std::vector<Vec2>& pixels,
+          const SfM_Data& sfm_data,
+          const std::function<const double*(IndexT)>& get_pose_ptr,
+          const Vec3& centroid,
+          double inv_avg_dist) {
+        auto* functor = new TriangulationResidual(
+          view_ids, pixels, sfm_data, get_pose_ptr, centroid, inv_avg_dist);
+        auto* cost_fn = new ceres::DynamicAutoDiffCostFunction<
+          TriangulationResidual, 3>(functor);
+        // 뷰마다 6 DOF 파라미터 블록 추가
+        for (size_t i = 0; i < view_ids.size(); ++i)
+          cost_fn->AddParameterBlock(6);
+        // 3D 점 블록 추가
+        cost_fn->AddParameterBlock(3);
+        cost_fn->SetNumResiduals(3);
+        return cost_fn;
+      }
+
+    private:
+      const std::vector<IndexT> view_ids_;
+      const std::vector<Vec2>   pixels_;
+      const SfM_Data&           sfm_data_;
+      const std::function<const double*(IndexT)> get_pose_ptr_;
+      const Vec3                centroid_;
+      const double              inv_avg_dist_;
+    };
+    struct PairwiseDistanceResidual {
+      PairwiseDistanceResidual(double d_gt, double w)
+        : d_gt_(d_gt), w_(w) {}
+      template<typename T>
+      bool operator()(const T* const Xi,
+                      const T* const Xj,
+                      T* residual) const {
+        T dx = Xi[0] - Xj[0],
+          dy = Xi[1] - Xj[1],
+          dz = Xi[2] - Xj[2];
+        T d = ceres::sqrt(dx*dx + dy*dy + dz*dz);
+        residual[0] = T(w_) * (d - T(d_gt_));
+        return true;
+      }
+      double d_gt_, w_;
+    };
     bool Bundle_Adjustment_Ceres::Adjust(
         SfM_Data &sfm_data, // the SfM scene to refine
         const Optimize_Options &options)
@@ -482,7 +617,9 @@ namespace openMVG
         if (options.structure_opt == Structure_Parameter_Type::NONE)
           problem.SetParameterBlockConstant(structure_landmark_it.second.X.data());
       }
-      
+      auto get_pose_ptr = [&](IndexT vid) -> const double* {
+        return &map_poses.at(vid)[0];
+      };
       if (options.control_point_opt.bUse_control_points)
       {
         // Use Ground Control Point:
@@ -536,39 +673,67 @@ namespace openMVG
             problem.SetParameterBlockConstant(gcp_landmark_it.second.X.data());
           }
         }
-
-        // std::map<IndexT, Vec3> map_triangulated = TriangulateControlPoints(sfm_data);
-        // std::cout << "map_triangulated size_zweight : " << map_triangulated.size() << std::endl;
-
         // Setup triangulated GCPs as parameters and add residual blocks
-        std::cout << "[CHECK] Residual count: " << problem.NumResidualBlocks() << std::endl;
-        std::cout << "[CHECK] Parameter block count: " << problem.NumParameterBlocks() << std::endl;
-        // 3D GCP
+        // Compute the centroid of all 3D control points
         Vec3 centroid = Vec3::Zero();
         const auto & cps = sfm_data.control_points;
         const int num_cps = int(cps.size());
         for (auto const & cp_pair : cps) {
+          // Sum up the position vectors of each control point
           centroid += cp_pair.second.X;
         }
+        // Divide by the number of control points to get the mean position
         centroid /= static_cast<double>(num_cps);
-
+        
+        // Compute the average distance from each control point to the centroid
         double avg_dist = 0.0;
         for (auto const & cp_pair : cps) {
+          // Accumulate the Euclidean distance
           avg_dist += (cp_pair.second.X - centroid).norm();
         }
+        // Finalize average by dividing by the number of control points
         avg_dist /= double(num_cps);
-
-        // 역수만 저장해 두면 Residual 내부에서 곱하기만 하면 됩니다.
+        // Compute the inverse of the average distance for normalizing residuals
         double inv_avg_dist = 1.0 / avg_dist;
 
-        // ——————————————————————————————
-        // (C) GCP별 관측(view_ids, pixels) 수집 & Residual 블록 준비
-        // ——————————————————————————————
+        // 1) 카메라 focal 평균 및 baseline 평균 계산
+        double sum_f = 0.0;
+        std::vector<Vec3> centers;
+        for (auto const& view_it : sfm_data.views) {
+          const View* v = view_it.second.get();
+          if (!sfm_data.IsPoseAndIntrinsicDefined(v)) continue;
+          // focal
+          auto* cam = sfm_data.GetIntrinsics().at(v->id_intrinsic).get();
+          // Pinhole_Intrinsic* 로 다운캐스트
+          const openMVG::cameras::Pinhole_Intrinsic* pin =
+              dynamic_cast<const openMVG::cameras::Pinhole_Intrinsic*>(cam);
+
+          double f = 0.0;
+          if (pin) {
+            f = pin->focal();  // 픽셀 단위 초점거리
+            sum_f += f;
+          }
+          // camera center
+          centers.push_back(sfm_data.GetPoseOrDie(v).center());
+        }
+        int C = (int)centers.size();
+        double f_avg = (C>0? sum_f/C : 1.0);
+        // baseline: average pairwise distance
+        double sum_base = 0;
+        int cnt = 0;
+        for (int i = 0; i < C; ++i) {
+          for (int j = i+1; j < C; ++j) {
+            sum_base += (centers[i] - centers[j]).norm();
+            ++cnt;
+          }
+        }
+        double baseline_avg = (cnt>0 ? sum_base / cnt : 1.0);
+
         for (auto const & cp_pair : cps) {
           IndexT cp_id      = cp_pair.first;
           const auto & landmark   = cp_pair.second;
 
-          // C-1) view_ids, pixels 모으기
+          // Collect all observation view IDs and corresponding image pixels
           std::vector<IndexT> view_ids;
           std::vector<Vec2>   pixels;
           view_ids.reserve(landmark.obs.size());
@@ -578,44 +743,98 @@ namespace openMVG
             pixels  .push_back(obs.second.x);
           }
 
-          // 관측이 2개 미만이면 삼각측량 불가 → 건너뜀
+          // Need at least two observations to triangulate
           if (view_ids.size() < 2) 
             continue;
+          
+          // 3) 픽셀 단위 weight 계산 (평균 Z = centroid.z)
+          double Zc = centroid[2];  // 또는 GCP 깊이 평균을 쓸 수도 있습니다
+          Vec3 weight_pixel;
+          weight_pixel[0] = f_avg  / Zc;                     // ΔX(m) → Δu(px)
+          weight_pixel[1] = f_avg  / Zc;                     // ΔY(m) → Δv(px)
+          weight_pixel[2] = f_avg  * baseline_avg / (Zc*Zc); // ΔZ(m) → Δ시차(px)
 
-          // Residual functor 생성
-          auto get_pose_ptr = [&](IndexT vid) -> const double* {
-            return &map_poses.at(vid)[0];
-          };
+          // Create the residual functor for 3D GCP reprojection error
           auto* functor = new GCP3DResidual(
-              view_ids, pixels,
-              sfm_data,
-              landmark.X,               // gt_point
-              Vec3(1,1,100),             // weight
-              get_pose_ptr,
-              centroid,
-              inv_avg_dist);
+              view_ids,                 // IDs of views observing this GCP
+              pixels,                   // 2D image measurements
+              sfm_data,                 // full SfM dataset
+              landmark.X,               // ground-truth 3D point
+              Vec3(0, 0, 1e8),          // weighting vector (x, y, z)
+              get_pose_ptr,             // pose lookup function
+              centroid,                 // centroid for normalization
+              inv_avg_dist              // inverse average distance for scaling
+            );
 
-          // C-3) DynamicAutoDiffCostFunction 설정
-          auto* cost_fn = new ceres::DynamicAutoDiffCostFunction<
-              GCP3DResidual,
-              3>(functor);
+          // Wrap the functor in an auto-differentiable cost function
+          auto* cost_fn = new ceres::DynamicAutoDiffCostFunction<GCP3DResidual, 3>(functor);
+          // Add one 6-DOF pose parameter block per observing view
           for (size_t i = 0; i < view_ids.size(); ++i)
             cost_fn->AddParameterBlock(6);
+          // There are 3 residuals (x, y, z)
           cost_fn->SetNumResiduals(3);
 
-          // C-4) parameter block 포인터 모아서 등록
+          // Gather pointers to all pose parameter blocks
           std::vector<double*> param_blocks;
           param_blocks.reserve(view_ids.size());
           for (auto vid : view_ids)
             param_blocks.push_back(&map_poses.at(vid)[0]);
 
+          // Add the residual block to the optimization problem
           problem.AddResidualBlock(
-              cost_fn,
-              new ceres::HuberLoss(1.0),
-              param_blocks);
+            cost_fn,
+            new ceres::HuberLoss(1.0),  // robust loss to lessen effect of outliers
+            param_blocks                // list of pointers to parameter blocks
+          );
         }
-        std::cout << "[CHECK] Residual count: " << problem.NumResidualBlocks() << std::endl;
-        std::cout << "[CHECK] Parameter block count: " << problem.NumParameterBlocks() << std::endl;
+        //pairwise distance constraint
+        std::vector<std::array<double,3>> map_Xparam;
+        map_Xparam.reserve(sfm_data.control_points.size());
+
+        for (size_t idx = 0; idx < sfm_data.control_points.size(); ++idx)
+        {
+          const auto &cp_pair  = *std::next(sfm_data.control_points.begin(), idx);
+          const auto &landmark = cp_pair.second;
+
+          // view_ids, pixels 재수집
+          std::vector<IndexT> view_ids;
+          std::vector<Vec2>   pixels;
+          view_ids.reserve(landmark.obs.size());
+          pixels  .reserve(landmark.obs.size());
+          for (auto const& obs : landmark.obs) {
+            view_ids.push_back(obs.first);
+            pixels  .push_back(obs.second.x);
+          }
+          if (view_ids.size() < 2) 
+            continue;
+
+          // X 파라미터 블록 초기값 추가
+          map_Xparam.push_back({landmark.X[0], landmark.X[1], landmark.X[2]});
+          // TriangulationResidual 비용 함수 생성
+          ceres::CostFunction* cf_tri = TriangulationResidual::Create(
+              view_ids, pixels,
+              sfm_data, get_pose_ptr,
+              centroid, inv_avg_dist);
+
+          // 파라미터 블록 포인터 모으기
+          std::vector<double*> blocks;
+          blocks.reserve(view_ids.size() + 1);
+
+          // 1) 각 뷰의 pose 블록 포인터
+          for (auto vid : view_ids) {
+            // get_pose_ptr(vid) → map_poses[vid].data()
+            blocks.push_back(const_cast<double*>( get_pose_ptr(vid) ));
+          }
+
+          // 2) 최적화할 GCP 3D 위치 블록
+          //    map_Xparam[idx] 은 std::array<double,3>
+          blocks.push_back( map_Xparam[idx].data() );
+
+          // Residual block 추가
+          problem.AddResidualBlock(cf_tri,
+                                  /*loss=*/ nullptr,
+                                  /*parameter_blocks=*/ blocks);
+        }
       }
 
       // Add Pose prior constraints if any
@@ -655,7 +874,10 @@ namespace openMVG
 #if CERES_VERSION_MAJOR < 2
       ceres_config_options.num_linear_solver_threads = ceres_options_.nb_threads_;
 #endif
-      ceres_config_options.parameter_tolerance = ceres_options_.parameter_tolerance_;
+      // ceres_config_options.parameter_tolerance = ceres_options_.parameter_tolerance_;
+      ceres_config_options.parameter_tolerance = 1e-10;
+      ceres_config_options.function_tolerance = 1e-6;
+      // ceres_config_options.gradient_tolerance = ??;
       // Solve BA
       ceres::Solver::Summary summary;
       ceres::Solve(ceres_config_options, &problem, &summary);
@@ -683,6 +905,7 @@ namespace openMVG
                     << " #residuals: " << summary.num_residuals << "\n"
                     << " Initial RMSE: " << std::sqrt(2 * summary.initial_cost / summary.num_residuals) << "\n"
                     << " Final RMSE: " << std::sqrt(2 * summary.final_cost / summary.num_residuals) << "\n"
+                    << " Termination type: " << summary.message << "\n"
                     << " Time (s): " << summary.total_time_in_seconds << "\n"
                     << std::endl;
           if (options.use_motion_priors_opt)
