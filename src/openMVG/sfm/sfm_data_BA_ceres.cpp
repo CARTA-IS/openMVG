@@ -590,7 +590,7 @@ namespace openMVG
               view_ids, pixels,
               sfm_data,
               landmark.X,               // gt_point
-              Vec3(1,1,100),             // weight
+              Vec3(1,1,1e8),             // weight
               get_pose_ptr,
               centroid,
               inv_avg_dist);
@@ -655,7 +655,9 @@ namespace openMVG
 #if CERES_VERSION_MAJOR < 2
       ceres_config_options.num_linear_solver_threads = ceres_options_.nb_threads_;
 #endif
-      ceres_config_options.parameter_tolerance = ceres_options_.parameter_tolerance_;
+      // ceres_config_options.parameter_tolerance = ceres_options_.parameter_tolerance_;
+      ceres_config_options.parameter_tolerance = 1e-10;
+      ceres_config_options.function_tolerance = 1e-6;
       // Solve BA
       ceres::Solver::Summary summary;
       ceres::Solve(ceres_config_options, &problem, &summary);
