@@ -25,7 +25,8 @@
 #include "openMVG/sfm/sfm_data.hpp"
 #include "openMVG/types.hpp"
 //3d gcp residual
-#include "openMVG/multiview/triangulation_nview.hpp"
+// #include "openMVG/multiview/triangulation_nview.hpp"
+#include "ceres/gradient_checker.h"
 
 #include <ceres/rotation.h>
 #include <ceres/types.h>
@@ -258,10 +259,11 @@ namespace openMVG
           TriangulateAlgebraicJet<T>(bearings_T, poses_T);
 
         // (3) residual = weight ∘ (X_est - gt_point)
+        double gsd = 0.032; // [m/px]
         Eigen::Matrix<T,3,1> diff = X_est - gt_point_.cast<T>();
-        residuals[0] = T(weight_[0]) * diff[0];
-        residuals[1] = T(weight_[1]) * diff[1];
-        residuals[2] = T(weight_[2]) * diff[2];
+        residuals[0] = T(weight_[0]) * diff[0] / gsd;
+        residuals[1] = T(weight_[1]) * diff[1] / gsd;
+        residuals[2] = T(weight_[2]) * diff[2] / gsd;
         return true;
       }
       const std::vector<IndexT>               view_ids_;
@@ -349,6 +351,13 @@ namespace openMVG
       // Data wrapper for refinement:
       Hash_Map<IndexT, std::vector<double>> map_intrinsics;
       Hash_Map<IndexT, std::vector<double>> map_poses;
+
+      /***************************************************/
+      // 
+      std::vector<ceres::ResidualBlockId> gcp3d_block_ids;         // Evaluate용
+      std::vector<std::vector<double*>>   gcp3d_param_blocks_all;  // (선택) GradientChecker 재사용시 참고
+      std::vector<ceres::CostFunction*>   gcp3d_costfns;           // (선택) GradientChecker용
+      /***************************************************/
 
       // Setup Poses data & subparametrization
       for (const auto &pose_it : sfm_data.poses)
@@ -557,7 +566,7 @@ namespace openMVG
           avg_dist += (cp_pair.second.X - centroid).norm();
         }
         avg_dist /= double(num_cps);
-
+        std::cout << "avg_dist(custom) : " << avg_dist << std::endl;
         // 역수만 저장해 두면 Residual 내부에서 곱하기만 하면 됩니다.
         double inv_avg_dist = 1.0 / avg_dist;
 
@@ -590,7 +599,7 @@ namespace openMVG
               view_ids, pixels,
               sfm_data,
               landmark.X,               // gt_point
-              Vec3(1,1,1e8),             // weight
+              Vec3(1,1,1),             // weight
               get_pose_ptr,
               centroid,
               inv_avg_dist);
@@ -608,11 +617,34 @@ namespace openMVG
           param_blocks.reserve(view_ids.size());
           for (auto vid : view_ids)
             param_blocks.push_back(&map_poses.at(vid)[0]);
+          
+          //valid
+          ceres::NumericDiffOptions ndopt; // 기본값 사용(필요시 step 조정)
+          ceres::GradientChecker checker(cost_fn, /*loss*/ nullptr, ndopt);
 
-          problem.AddResidualBlock(
+          // const double* 배열로 변환
+          std::vector<const double*> params_const(param_blocks.begin(), param_blocks.end());
+
+          ceres::GradientChecker::ProbeResults results;
+          const bool ok = checker.Probe(params_const.data(), /*relative_step*/ 1e-6, &results);
+          if (!ok) {
+            LOG(WARNING) << "[GCP3DResidual] Gradient check FAILED for cp_id=" << cp_id
+                        << " details:\n" << results.error_log;
+            // 필요하면 assert나 early return으로 막아도 됨
+          } else {
+            // 선택: 통과 로그
+            std::cout << "[GCP3DResidual] Gradient check OK for cp_id=" << cp_id;
+          }
+
+          ceres::ResidualBlockId rb_id = problem.AddResidualBlock(
               cost_fn,
-              new ceres::HuberLoss(1.0),
+              // new ceres::HuberLoss(1.0),
+              nullptr,
               param_blocks);
+          // 나중 Evaluate/재검증 대비해서 보관
+          gcp3d_block_ids.push_back(rb_id);
+          gcp3d_param_blocks_all.push_back(param_blocks); // (선택) GradientChecker 재검증용
+          gcp3d_costfns.push_back(cost_fn);
         }
         std::cout << "[CHECK] Residual count: " << problem.NumResidualBlocks() << std::endl;
         std::cout << "[CHECK] Parameter block count: " << problem.NumParameterBlocks() << std::endl;
@@ -661,6 +693,59 @@ namespace openMVG
       // Solve BA
       ceres::Solver::Summary summary;
       ceres::Solve(ceres_config_options, &problem, &summary);
+
+      /*****************************************/
+      double sum_raw = 0.0, sum_rob = 0.0;
+      int    count   = 0;
+
+      for (size_t i = 0; i < gcp3d_block_ids.size(); ++i) {
+        ceres::Problem::EvaluateOptions eo;
+        eo.residual_blocks = { gcp3d_block_ids[i] };
+
+        // 1) raw residual / raw cost
+        eo.apply_loss_function = false;
+        double cost_raw = 0.0;
+        std::vector<double> r_raw; // size == 3
+        problem.Evaluate(eo, &cost_raw, &r_raw, nullptr, nullptr);
+
+        const double s = r_raw[0]*r_raw[0] + r_raw[1]*r_raw[1] + r_raw[2]*r_raw[2];
+        const double n_raw = std::sqrt(s);           // ||r||
+
+        // 2) robust cost (정확한 로스 비용)
+        eo.apply_loss_function = true;
+        double cost_rob = 0.0;
+        // residuals는 버전에 따라 raw 그대로일 수 있으니 여기선 쓰지 않음
+        problem.Evaluate(eo, &cost_rob, nullptr, nullptr, nullptr);
+
+        // 3) Huber 스케일 a = sqrt(rho'(s))로 等가 잔차 노름 계산
+        //    (블록에서 사용한 delta를 반드시 동일하게 써야 함)
+        ceres::HuberLoss huber(/*delta=*/1.0); // <- 실제 AddResidualBlock에 쓴 delta로
+        double rho[3]; // rho[0]=rho(s), rho[1]=rho'(s), rho[2]=rho''(s)
+        huber.Evaluate(s, rho);
+        const double a = std::sqrt(std::max(rho[1], 0.0));
+        const double n_rob_equiv = a * n_raw;    // 로스 적용 等가 잔차 노름
+
+        // 로그
+        // raw cost = 0.5*s, robust cost = rho(s)
+        // robust equiv residual norm = sqrt(rho'(s)) * ||r||
+        // (residual 단위는 r_raw가 px 等가면 px)
+        std::cout << "[GCP3DResidual] block#" << i
+                  << " ||r||=" << n_raw
+                  << "  raw_cost=" << (0.5*s)
+                  << "  robust_cost=" << cost_rob
+                  << "  ||r||_rob_equiv=" << n_rob_equiv;
+
+        sum_raw += n_raw;
+        sum_rob += n_rob_equiv;
+        ++count;
+      }
+
+      if (count) {
+        std::cout << "[GCP3DResidual] mean ||r|| (raw) = " << (sum_raw / count)
+                  << "  mean ||r|| (robust-equiv) = " << (sum_rob / count);
+      }
+
+      /********************************************************/
       if (ceres_options_.bCeres_summary_)
         std::cout << summary.FullReport() << std::endl;
       // If no error, get back refined parameters
