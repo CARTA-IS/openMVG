@@ -488,6 +488,7 @@ namespace openMVG
                     << " Initial RMSE: " << std::sqrt(2 * summary.initial_cost / summary.num_residuals) << "\n"
                     << " Final RMSE: " << std::sqrt(2 * summary.final_cost / summary.num_residuals) << "\n"
                     << " Time (s): " << summary.total_time_in_seconds << "\n"
+                    << " p_tol: " << ceres_config_options.parameter_tolerance << "\n"
                     << std::endl;
           if (options.use_motion_priors_opt)
             std::cout << "Usable motion priors: " << (int)b_usable_prior << std::endl;
