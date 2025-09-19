@@ -106,7 +106,8 @@ namespace openMVG
         bool bmultithreaded)
         : bVerbose_(bVerbose),
           nb_threads_(1),
-          parameter_tolerance_(1e-8), //~= numeric_limits<float>::epsilon()
+          parameter_tolerance_(1e-10), //~= numeric_limits<float>::epsilon()
+          function_tolerance_(1e-5),
           bUse_loss_function_(true)
     {
 #ifdef OPENMVG_USE_OPENMP
@@ -457,6 +458,7 @@ namespace openMVG
       ceres_config_options.num_linear_solver_threads = ceres_options_.nb_threads_;
 #endif
       ceres_config_options.parameter_tolerance = ceres_options_.parameter_tolerance_;
+      ceres_config_options.function_tolerance = ceres_options_.function_tolerance_;
 
       // Solve BA
       ceres::Solver::Summary summary;
