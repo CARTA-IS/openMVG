@@ -15,7 +15,11 @@ SET(HeaderFiles
 document.hpp
 GCPRegister.hpp
 GCP.hpp
-GCPList.hpp)
+GCPList.hpp
+RobustTrackRemover.hpp
+sfm_sigmas.hpp
+GCPQualityAssessment.hpp
+AdaptiveBAScheduler.hpp)
 # ==============================================================================
 # Add the following files, modules and libraries to the project.
 # ==============================================================================

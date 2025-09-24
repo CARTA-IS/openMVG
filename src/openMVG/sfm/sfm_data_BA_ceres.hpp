@@ -33,6 +33,7 @@ class Bundle_Adjustment_Ceres : public Bundle_Adjustment
   public:
   struct BA_Ceres_options
   {
+    int max_num_iterations_;
     bool bVerbose_;
     unsigned int nb_threads_;
     bool bCeres_summary_;
@@ -40,9 +41,14 @@ class Bundle_Adjustment_Ceres : public Bundle_Adjustment
     int preconditioner_type_;
     int sparse_linear_algebra_library_type_;
     double parameter_tolerance_;
+    double function_tolerance_;
+    double gradient_tolerance_;
     bool bUse_loss_function_;
+    bool use_whitening_;
+    double sigma_track_px_;
+    double sigma_gcp_px_;
 
-    BA_Ceres_options(const bool bVerbose = true, bool bmultithreaded = true);
+    BA_Ceres_options(int max_num_iterations = 500, const bool bVerbose = true, bool bmultithreaded = true);
   };
   private:
     BA_Ceres_options ceres_options_;

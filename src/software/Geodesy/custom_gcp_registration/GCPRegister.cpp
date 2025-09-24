@@ -1,4 +1,8 @@
 #include "GCPRegister.hpp"
+#include "RobustTrackRemover.hpp"
+#include "sfm_sigmas.hpp"
+#include "GCPQualityAssessment.hpp"
+#include "AdaptiveBAScheduler.hpp"
 //openMVG Libraries
 #include "openMVG/cameras/Camera_Intrinsics.hpp"
 #include "openMVG/multiview/triangulation_nview.hpp"
@@ -116,6 +120,17 @@ void GCPRegister::registerProject(double weight)
     if (m_doc._sfm_data.control_points.size() < 3)
     {
         std::cout << "At least 3 control points are required." << std::endl;
+        return;
+    }
+    
+    // === NEW: GCP 품질 평가 및 필터링 ===
+    std::cout << "\n=== GCP Quality Assessment ===" << std::endl;
+    auto removed_gcps = gcp_quality::FilterLowQualityGCPs(m_doc._sfm_data, 0.7, 3.0);
+    std::cout << "Removed " << removed_gcps.size() << " low-quality GCPs" << std::endl;
+    
+    if (m_doc._sfm_data.control_points.size() < 3)
+    {
+        std::cout << "Insufficient high-quality control points after filtering." << std::endl;
         return;
     }
     // Assert that control points can be triangulated
@@ -302,29 +317,88 @@ void GCPRegister::registerProject(double weight)
             std::cout << "Registration failed. Please check your Control Points coordinates." << std::endl;
         }
     }
-
-    //---
-    // Bundle adjustment with GCP
-    //---
+    double reprojection_error_mean = 0;
+    for (const auto &cp : map_control_points)
     {
-        std::cout << "debug begin" << std::endl;
-        bool useBundle = (weight > 0);
-        using namespace openMVG::sfm;
-        Bundle_Adjustment_Ceres::BA_Ceres_options options;
-        Bundle_Adjustment_Ceres bundle_adjustment_obj(options);
-        Control_Point_Parameter control_point_opt(weight, useBundle);
-        if (!bundle_adjustment_obj.Adjust(m_doc._sfm_data,
-                                          Optimize_Options(
-                                              cameras::Intrinsic_Parameter_Type::ADJUST_ALL, // Keep intrinsic constant
-                                              Extrinsic_Parameter_Type::ADJUST_ALL,          // Adjust camera motion
-                                              Structure_Parameter_Type::ADJUST_ALL,          // Adjust structure
-                                              control_point_opt                              // Use GCP and weight more their observation residuals
-                                              )))
-        {
-            std::cout << "BA with GCP failed." << std::endl;
-        }
-        std::cout << "debug finish" << std::endl;
+        std::cout << "triangulation error for GCP "<< cp.first <<" is "<< map_triangulation_errors[cp.first] << std::endl;
+        //reprojection_error_mean for triangulation noise
+        reprojection_error_mean += map_triangulation_errors[cp.first];
     }
+    if (map_triangulation_errors.size() > 0)
+    {
+        reprojection_error_mean /= map_triangulation_errors.size();
+    }
+    std::cout << "mean reprojection error is "<< reprojection_error_mean <<std::endl;
+    //weight = reprojection_error_mean;
+    //---
+    // === NEW: 적응형 Bundle Adjustment with GCP ===
+    //---
+    std::cout << "\n=== Adaptive Bundle Adjustment ===" << std::endl;
+    
+    // 시그마 계산 및 출력
+    auto [sigTrack, sigGcp] = sfm_sigma::ComputeSigmasPx(m_doc._sfm_data, /*cheirality=*/false);
+    sfm_sigma::PrintSigma(sigTrack, "track");
+    sfm_sigma::PrintSigma(sigGcp,   "gcp");
+    
+    // BA 옵션 설정
+    Bundle_Adjustment_Ceres::BA_Ceres_options ba_options;
+    ba_options.max_num_iterations_ = 50;
+    ba_options.bVerbose_ = true;
+    ba_options.bCeres_summary_ = true;
+    ba_options.linear_solver_type_ = 5; // SPARSE_SCHUR
+    ba_options.preconditioner_type_ = 2; // SCHUR_JACOBI
+    ba_options.sparse_linear_algebra_library_type_ = 2; // SUITE_SPARSE
+    ba_options.parameter_tolerance_ = 1e-8;
+    ba_options.gradient_tolerance_ = 1e-10;
+    ba_options.function_tolerance_ = 1e-6;
+    ba_options.bUse_loss_function_ = true;
+    
+    // 시그마 기반 가중치 설정
+    float p = 1.0;
+    if (sigTrack.has_data) {
+        ba_options.sigma_track_px_ = sigTrack.rms_radial/sqrt(2);
+        p = sigTrack.rms_radial/std::sqrt(sigTrack.sx*sigTrack.sx + sigTrack.sy*sigTrack.sy);
+        if (p > 1.5) {
+            std::cout << "Track Corrupted long tail : p is " << p << std::endl;
+            ba_options.sigma_track_px_ = sigTrack.s;
+        }
+    }
+    if (sigGcp.has_data) {
+        ba_options.sigma_gcp_px_ = sigGcp.rms_radial/sqrt(2);
+        p = sigGcp.rms_radial/std::sqrt(sigGcp.sx*sigGcp.sx + sigGcp.sy*sigGcp.sy);
+        if (p > 1.5) {
+            std::cout << "GCP Corrupted long tail : p is " << p << std::endl;
+            ba_options.sigma_gcp_px_ = sigGcp.s;
+        }
+    }
+    
+    // 적응형 가중치 계산
+    weight = sqrt(sigTrack.n_items / sigGcp.n_items) * Square(sigGcp.s/sigTrack.s);
+    
+    // 공분산 분석 및 적응형 파라미터 잠금 (현재는 기본값 사용)
+    std::vector<int> locked_params;
+    // TODO: 실제 공분산 분석은 Bundle Adjustment 중에 수행됨
+    std::cout << "Using default parameter locking strategy" << std::endl;
+    
+    // 적응형 BA 스케줄러 실행
+    adaptive_ba::AdaptiveBAScheduler scheduler;
+    bool ba_success = scheduler.ExecuteAdaptiveBA(m_doc._sfm_data, ba_options, locked_params);
+    
+    if (!ba_success) {
+        std::cout << "Warning: Some BA stages failed, but continuing..." << std::endl;
+    }
+    
+    // 트랙 정리
+    std::cout << "\n=== Track Cleaning ===" << std::endl;
+    TrackCleanParams removerParams;
+    removerParams.min_obs_per_track = 4;
+    if (sigGcp.has_data) {
+        removerParams.sigma_px = sigTrack.s;
+    }
+    
+    std::pair<size_t,size_t> removalResult = CleanTracksAfterAddingGCP(m_doc._sfm_data, removerParams);
+    std::cout << "Track cleaning result: removed " << removalResult.first 
+              << " observations, " << removalResult.second << " tracks" << std::endl;
     //---
     // isotropic normalization:
     // - compute the centroid of the cameras
@@ -336,6 +410,7 @@ void GCPRegister::registerProject(double weight)
         const openMVG::geometry::Pose3 &pose = it.second;
         centroid += pose.center();
     }
+
     centroid = centroid / m_doc._sfm_data.poses.size();
     std::cout << "estimated centroid : " << centroid << std::endl;
     avg_dist = 0.0;
@@ -441,9 +516,9 @@ void GCPRegister::registerProject(double weight)
         Vec3 t;
         Mat3 R;
         double S;
-        if (openMVG::geometry::FindRTS(x1, x2, &S, &t, &R))
+        if (openMVG::geometry::FindRTS(x1, x1, &S, &t, &R))
         {
-            openMVG::geometry::Refine_RTS(x1, x2, &S, &t, &R);
+            openMVG::geometry::Refine_RTS(x1, x1, &S, &t, &R);
             std::cout << "Found transform:\n"
                       << " scale: " << S << "\n"
                       << " rotation:\n"

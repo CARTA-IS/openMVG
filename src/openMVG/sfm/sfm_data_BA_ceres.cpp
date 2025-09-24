@@ -25,6 +25,9 @@
 #include "openMVG/sfm/sfm_data.hpp"
 #include "openMVG/types.hpp"
 
+#include "sfm_radial_weights.hpp"
+#include "brown_corr_adaptive.hpp"
+
 #include <ceres/rotation.h>
 #include <ceres/types.h>
 
@@ -102,12 +105,18 @@ namespace openMVG
     }
 
     Bundle_Adjustment_Ceres::BA_Ceres_options::BA_Ceres_options(
+        int max_num_iterations,
         const bool bVerbose,
         bool bmultithreaded)
-        : bVerbose_(bVerbose),
+        : max_num_iterations_(max_num_iterations),
+          bVerbose_(bVerbose),
           nb_threads_(1),
           parameter_tolerance_(1e-8), //~= numeric_limits<float>::epsilon()
-          bUse_loss_function_(true)
+          function_tolerance_(1e-6),
+          gradient_tolerance_(1e-10),
+          bUse_loss_function_(true),
+          sigma_gcp_px_(-1.0),
+          sigma_track_px_(-1.0)
     {
 #ifdef OPENMVG_USE_OPENMP
       nb_threads_ = omp_get_max_threads();
@@ -118,8 +127,8 @@ namespace openMVG
       bCeres_summary_ = false;
 
       // Default configuration use a DENSE representation
-      linear_solver_type_ = ceres::DENSE_SCHUR;
-      preconditioner_type_ = ceres::JACOBI;
+      linear_solver_type_ = ceres::ITERATIVE_SCHUR; //ceres::DENSE_SCHUR;
+      preconditioner_type_ = ceres::SCHUR_JACOBI; //ceres::JACOBI;
       // If Sparse linear solver are available
       // Descending priority order by efficiency (SUITE_SPARSE > CX_SPARSE > EIGEN_SPARSE)
       if (ceres::IsSparseLinearAlgebraLibraryTypeAvailable(ceres::SUITE_SPARSE))
@@ -314,33 +323,64 @@ namespace openMVG
 
       // Set a LossFunction to be less penalized by false measurements
       //  - set it to nullptr if you don't want use a lossFunction.
+      double huber_delta_track = 16.0;
+      double huber_delta_gcp = 4.0;
+      if (ceres_options_.sigma_track_px_ > 0)
+      {
+        huber_delta_track = ceres_options_.sigma_track_px_* 2.5;
+      }
+      if (ceres_options_.sigma_gcp_px_ > 0)
+      {
+        huber_delta_gcp = ceres_options_.sigma_gcp_px_* 3.5;
+      }
       ceres::LossFunction *p_LossFunction =
-          ceres_options_.bUse_loss_function_ ? new ceres::HuberLoss(Square(4.0))
+          ceres_options_.bUse_loss_function_ ? new ceres::HuberLoss(huber_delta_track)
                                              : nullptr;
-
+      auto safe_sq_inv = [](double s)->double {
+        return 1.0 / std::max(1e-12, s*s);
+      };
+      const double scale_track =
+        ( ceres_options_.sigma_track_px_ > 0.0)
+          ? safe_sq_inv(ceres_options_.sigma_track_px_) : 1.0;
+      
+      sfm_radw::RadialWeighter RW;
+      RW.P.gamma = 1.6;   // 외곽을 약간 더 세게
+      RW.P.alpha = 0.3;   // 중앙도 최소 0.3배 가중 유지
+      RW.Build(sfm_data);
+      
       // For all visibility add reprojections errors:
       for (auto &structure_landmark_it : sfm_data.structure)
       {
         const Observations &obs = structure_landmark_it.second.obs;
-
+        
         for (const auto &obs_it : obs)
         {
           // Build the residual block corresponding to the track observation:
           const View *view = sfm_data.views.at(obs_it.first).get();
-
+          double w_rad = 0.0;
+          if (sfm_data.intrinsics.at(view->id_intrinsic).get()->getType() != CAMERA_SPHERICAL) // && options.intrinsics_opt != Intrinsic_Parameter_Type::NONE)
+          {
+            w_rad = RW.Weight(view->id_view, obs_it.second.x);
+          }
           // Each Residual block takes a point and a camera as input and outputs a 2
           // dimensional residual. Internally, the cost function stores the observed
           // image location and compares the reprojection against the observation.
           ceres::CostFunction *cost_function =
               IntrinsicsToCostFunction(sfm_data.intrinsics.at(view->id_intrinsic).get(),
-                                       obs_it.second.x);
+                                       obs_it.second.x,w_rad);
 
           if (cost_function)
           {
+            ceres::LossFunction* loss_track = p_LossFunction;
+            if (loss_track && scale_track != 1.0) {
+              // p_LossFunction을 여러 블록에서 재사용하므로 DO_NOT_TAKE_OWNERSHIP
+              loss_track = new ceres::ScaledLoss(loss_track, scale_track, ceres::DO_NOT_TAKE_OWNERSHIP);
+            }
             if (!map_intrinsics.at(view->id_intrinsic).empty())
             {
+              
               problem.AddResidualBlock(cost_function,
-                                       p_LossFunction,
+                                       loss_track,
                                        &map_intrinsics.at(view->id_intrinsic)[0],
                                        &map_poses.at(view->id_pose)[0],
                                        structure_landmark_it.second.X.data());
@@ -348,7 +388,7 @@ namespace openMVG
             else
             {
               problem.AddResidualBlock(cost_function,
-                                       p_LossFunction,
+                                       loss_track,
                                        &map_poses.at(view->id_pose)[0],
                                        structure_landmark_it.second.X.data());
             }
@@ -365,6 +405,7 @@ namespace openMVG
 
       if (options.control_point_opt.bUse_control_points)
       {
+         
         // Use Ground Control Point:
         // - fixed 3D points with weighted observations
         for (auto &gcp_landmark_it : sfm_data.control_points)
@@ -373,9 +414,14 @@ namespace openMVG
 
           for (const auto &obs_it : obs)
           {
+            
             // Build the residual block corresponding to the track observation:
             const View *view = sfm_data.views.at(obs_it.first).get();
-
+            double w_rad = 0.0;
+            if (sfm_data.intrinsics.at(view->id_intrinsic).get()->getType() != CAMERA_SPHERICAL)//  && options.intrinsics_opt != Intrinsic_Parameter_Type::NONE)
+            { 
+              w_rad = RW.Weight(view->id_view, obs_it.second.x);
+            }
             // Each Residual block takes a point and a camera as input and outputs a 2
             // dimensional residual. Internally, the cost function stores the observed
             // image location and compares the reprojection against the observation.
@@ -383,14 +429,32 @@ namespace openMVG
                 IntrinsicsToCostFunction(
                     sfm_data.intrinsics.at(view->id_intrinsic).get(),
                     obs_it.second.x,
-                    options.control_point_opt.weight);
+                    w_rad);//options.control_point_opt.weight);
 
             if (cost_function)
             {
+              using ceres::TAKE_OWNERSHIP;
+
+              // 1px 근처 데드존(1.0~1.1px에서 부드럽게 전환)
+              auto* tolerant = new ceres::TolerantLoss(/*a=*/0.9, /*b=*/0.16);
+
+              // 큰 오차는 Huber로 강건화
+              auto* huber = new ceres::HuberLoss(/*delta=*/huber_delta_gcp);
+
+              // 합성: h(s) = Huber( Tolerant(s) )
+              auto* loss_gcp = huber; //  new ceres::ComposedLoss(huber, TAKE_OWNERSHIP,tolerant, TAKE_OWNERSHIP);
+              double scale_gcp = options.control_point_opt.weight;
+              if (ceres_options_.sigma_gcp_px_ > 0.0) {
+                scale_gcp *= safe_sq_inv(ceres_options_.sigma_gcp_px_);
+              }
+              ceres::LossFunction* loss_for_block =
+                (scale_gcp != 1.0) ? (ceres::LossFunction*) new ceres::ScaledLoss(loss_gcp, scale_gcp, TAKE_OWNERSHIP)
+                                   : (ceres::LossFunction*) loss_gcp;
+
               if (!map_intrinsics.at(view->id_intrinsic).empty())
               {
                 problem.AddResidualBlock(cost_function,
-                                         nullptr,
+                                         loss_for_block, // nullptr,
                                          &map_intrinsics.at(view->id_intrinsic)[0],
                                          &map_poses.at(view->id_pose)[0],
                                          gcp_landmark_it.second.X.data());
@@ -398,7 +462,7 @@ namespace openMVG
               else
               {
                 problem.AddResidualBlock(cost_function,
-                                         nullptr,
+                                         loss_for_block, //nullptr,
                                          &map_poses.at(view->id_pose)[0],
                                          gcp_landmark_it.second.X.data());
               }
@@ -443,7 +507,7 @@ namespace openMVG
       // Configure a BA engine and run it
       //  Make Ceres automatically detect the bundle structure.
       ceres::Solver::Options ceres_config_options;
-      ceres_config_options.max_num_iterations = 500;
+      ceres_config_options.max_num_iterations = ceres_options_.max_num_iterations_;
       ceres_config_options.preconditioner_type =
           static_cast<ceres::PreconditionerType>(ceres_options_.preconditioner_type_);
       ceres_config_options.linear_solver_type =
@@ -456,11 +520,85 @@ namespace openMVG
 #if CERES_VERSION_MAJOR < 2
       ceres_config_options.num_linear_solver_threads = ceres_options_.nb_threads_;
 #endif
-      ceres_config_options.parameter_tolerance = ceres_options_.parameter_tolerance_;
+      //ceres_config_options.parameter_tolerance = ceres_options_.parameter_tolerance_;
+      
+      ceres_config_options.parameter_tolerance = ceres_options_.parameter_tolerance_; // 1e-8;
+      ceres_config_options.gradient_tolerance = ceres_options_.gradient_tolerance_; // 1e-10;
+      
+      ceres_config_options.function_tolerance = ceres_options_.function_tolerance_; // 1e-6;
 
       // Solve BA
       ceres::Solver::Summary summary;
+      ceres::Solver::Summary summary_tmp;
+      
+      ceres_config_options.max_num_iterations = ceres_options_.max_num_iterations_ / 3;
+      ceres::Solve(ceres_config_options, &problem, &summary_tmp);  //solve for intrinsic corr.
+      ceres_config_options.max_num_iterations = ceres_options_.max_num_iterations_*2/3;
+      
+      struct SavedState { double* ptr; bool was_const; };
+      
+      
+      for (const auto &intrinsic_it : sfm_data.intrinsics)
+      {
+        const IndexT indexCam = intrinsic_it.first;
+        if( isValid(intrinsic_it.second->getType()) && intrinsic_it.second->getType() == PINHOLE_CAMERA_BROWN && options.intrinsics_opt != Intrinsic_Parameter_Type::NONE)
+        {
+          auto& intr = map_intrinsics.at(indexCam); //map_intrinsics[camera_id];              // std::vector<double> (size=7)
+          if (intr.size() != 8 /*BROWN_SIZE*/){
+            std::cout<< "intrinsic size is "<<intr.size()<< std::endl;
+            continue;
+          }
+          std::vector<SavedState> saved;
+          saved.reserve(map_poses.size() + sfm_data.structure.size() + 1);
+
+          // 1) Pose 블록들을 Constant로
+          for (auto& kv : map_poses) {
+            double* pb = kv.second.data();                // angle-axis(3)+t(3) = 6
+            if (!problem.HasParameterBlock(pb)) continue;
+            bool wc = problem.IsParameterBlockConstant(pb);
+            saved.push_back({pb, wc});
+            if (!wc) problem.SetParameterBlockConstant(pb);
+          }
+
+          // 2) 3D 포인트(Structure) 블록들을 Constant로
+          for (auto& kv : sfm_data.structure) {
+            double* pb = kv.second.X.data();              // Eigen::Vector3d
+            if (!problem.HasParameterBlock(pb)) continue;
+            bool wc = problem.IsParameterBlockConstant(pb);
+            saved.push_back({pb, wc});
+            if (!wc) problem.SetParameterBlockConstant(pb);
+          }
+          std::cout<< "Compute Corr" << std::endl;
+          auto  [C, st ]   = brown_corr_adapt::ComputeCorr_BrownT2(problem, intr);
+          if (!st.ok) {
+            std::cerr << "[corr] not available: " << st.reason
+                      << " (local_size=" << st.local_size
+                      << ", is_constant=" << st.is_constant << ")\n";
+            // 필요시: 고정 해제 후 다시 시도, 또는 Subset 매핑을 넘겨서 로컬→글로벌로 투영
+          } else {
+            brown_corr_adapt::PrintCorr(C);
+            
+            // corr → adaptive plan
+            auto  plan = brown_corr_adapt::DecidePlan(C);
+            std::cout << "plan: " << plan.note << "\n";
+
+            // 다음 BA에서 적용할 것들:
+
+            // 1) Intrinsic 잠금(SubsetParameterization)
+            //    (sfm_data_BA_ceres.cpp에서 intrinsic 블록에 subset을 설정하는 부분과 동일하게)
+            std::vector<int> const_idx = brown_corr_adapt::BuildConstIndexList(plan);
+            ceres::SubsetParameterization* sub = new ceres::SubsetParameterization(8, const_idx);
+            problem.SetParameterization(&intr[0], sub);
+          }
+          for (auto it = saved.rbegin(); it != saved.rend(); ++it) {
+            if (it->was_const) problem.SetParameterBlockConstant(it->ptr);
+            else               problem.SetParameterBlockVariable(it->ptr);
+          }
+        }
+      }
+      //
       ceres::Solve(ceres_config_options, &problem, &summary);
+
       if (ceres_options_.bCeres_summary_)
         std::cout << summary.FullReport() << std::endl;
 
