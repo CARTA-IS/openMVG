@@ -28,8 +28,37 @@
 #include <ceres/rotation.h>
 #include <ceres/types.h>
 
+#include <cstdlib>
 #include <iostream>
 #include <limits>
+#include <string>
+
+namespace
+{
+// Loss function for the pose-center (GPS/RTK) prior residuals, selectable at
+// runtime via the OPENMVG_POSE_PRIOR_LOSS environment variable:
+//   (unset)     -> HuberLoss(fitting_error^2)  [stock behavior, unchanged]
+//   "quadratic" -> plain squared (L2) loss, i.e. no robust wrapper. Use when
+//                  the GNSS positions are trusted observations (e.g. RTK-fixed
+//                  with per-view sigma encoded in the prior weights). The
+//                  prior term itself stays active.
+//   "huber:<d>" -> HuberLoss(d)
+// Note: Ceres HuberLoss(a) takes the RESIDUAL-scale threshold directly
+// (rho(s) = s for s <= a^2). Do not pass a squared value as <d>.
+ceres::LossFunction *OpenMVG_BA_PosePriorLoss(double fitting_error)
+{
+  const char *e = std::getenv("OPENMVG_POSE_PRIOR_LOSS");
+  if (e)
+  {
+    const std::string s(e);
+    if (s == "quadratic")
+      return nullptr; // nullptr = plain squared loss in Ceres
+    if (s.rfind("huber:", 0) == 0)
+      return new ceres::HuberLoss(std::atof(s.c_str() + 6));
+  }
+  return new ceres::HuberLoss(fitting_error * fitting_error);
+}
+} // namespace
 
 namespace openMVG
 {
@@ -434,8 +463,7 @@ namespace openMVG
 
             problem.AddResidualBlock(
                 cost_function,
-                new ceres::HuberLoss(
-                    Square(pose_center_robust_fitting_error)),
+                OpenMVG_BA_PosePriorLoss(pose_center_robust_fitting_error),
                 &map_poses.at(prior->id_view)[0]);
           }
         }
