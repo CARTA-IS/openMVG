@@ -110,9 +110,44 @@ void GCPRegister::loadGCPFile(std::string gcpFile)
     }
 }
 
-void GCPRegister::registerProject(double weight)
+void GCPRegister::registerProject(double weight, const std::string &refine)
 {
     std::cout << "Bundle weight : " << weight << std::endl;
+
+    // The GCP-weighted BA below used to hard-code ADJUST_ALL, which silently
+    // re-opens the focal length that the SfM stage was told to keep fixed via
+    // --refine_intrinsics. Selectable here; ADJUST_ALL stays the default.
+    cameras::Intrinsic_Parameter_Type intrinsic_opt =
+        cameras::Intrinsic_Parameter_Type::ADJUST_ALL;
+    std::string effective = "ADJUST_ALL";
+    if (refine == "NONE")
+    {
+        intrinsic_opt = cameras::Intrinsic_Parameter_Type::NONE;
+        effective = refine;
+    }
+    else if (refine == "ADJUST_FOCAL_LENGTH")
+    {
+        intrinsic_opt = cameras::Intrinsic_Parameter_Type::ADJUST_FOCAL_LENGTH;
+        effective = refine;
+    }
+    else if (refine == "ADJUST_PRINCIPAL_POINT")
+    {
+        intrinsic_opt = cameras::Intrinsic_Parameter_Type::ADJUST_PRINCIPAL_POINT;
+        effective = refine;
+    }
+    else if (refine == "ADJUST_DISTORTION")
+    {
+        intrinsic_opt = cameras::Intrinsic_Parameter_Type::ADJUST_DISTORTION;
+        effective = refine;
+    }
+    else if (refine != "ADJUST_ALL")
+    {
+        std::cout << "Unknown intrinsic refine mode '" << refine
+                  << "', falling back to ADJUST_ALL." << std::endl;
+    }
+    // 적용되는 모드를 찍는다. 넘어온 문자열을 그대로 찍으면 오타일 때
+    // ADJUST_ALL 로 도는데 로그에는 오타가 남아 원인 추적이 어긋난다.
+    std::cout << "Intrinsic refine mode : " << effective << std::endl;
     if (m_doc._sfm_data.control_points.size() < 3)
     {
         std::cout << "At least 3 control points are required." << std::endl;
@@ -315,10 +350,10 @@ void GCPRegister::registerProject(double weight)
         Control_Point_Parameter control_point_opt(weight, useBundle);
         if (!bundle_adjustment_obj.Adjust(m_doc._sfm_data,
                                           Optimize_Options(
-                                              cameras::Intrinsic_Parameter_Type::ADJUST_ALL, // Keep intrinsic constant
-                                              Extrinsic_Parameter_Type::ADJUST_ALL,          // Adjust camera motion
-                                              Structure_Parameter_Type::ADJUST_ALL,          // Adjust structure
-                                              control_point_opt                              // Use GCP and weight more their observation residuals
+                                              intrinsic_opt,                        // Selectable; see registerProject()
+                                              Extrinsic_Parameter_Type::ADJUST_ALL, // Adjust camera motion
+                                              Structure_Parameter_Type::ADJUST_ALL, // Adjust structure
+                                              control_point_opt                     // Use GCP and weight more their observation residuals
                                               )))
         {
             std::cout << "BA with GCP failed." << std::endl;

@@ -26,6 +26,10 @@ public:
     void saveProject(std::string savePath);
     void openProject(std::string projectPath);
     void loadGCPFile(std::string gcpFile);
-    void registerProject(double weight = 20.0);
+    // refine: intrinsic refine mode for the GCP-weighted bundle adjustment.
+    // "NONE" | "ADJUST_FOCAL_LENGTH" | "ADJUST_PRINCIPAL_POINT" | "ADJUST_DISTORTION" | "ADJUST_ALL"
+    // Defaults to ADJUST_ALL so the previous behaviour is unchanged.
+    void registerProject(double weight = 20.0,
+                         const std::string &refine = "ADJUST_ALL");
 };
 #endif
