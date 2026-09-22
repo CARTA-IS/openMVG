@@ -24,21 +24,25 @@ std::string GCPRegister::GetProjection()
 {
     return prj;
 }
-void GCPRegister::saveProject(std::string dstPath)
+bool GCPRegister::saveProject(std::string dstPath)
 {
     if (!m_doc.saveData(dstPath))
     {
-        std::cout << "Cannot save the sfm_data file." << dstPath << std::endl;
+        std::cerr << "Cannot save the sfm_data file." << dstPath << std::endl;
+        return false;
     }
+    return true;
 }
-void GCPRegister::openProject(std::string projectPath)
+bool GCPRegister::openProject(std::string projectPath)
 {
     if (!m_doc.loadData(projectPath))
     {
-        std::cout << "Cannot open the sfm_data file." << projectPath << std::endl;
+        std::cerr << "Cannot open the sfm_data file." << projectPath << std::endl;
+        return false;
     }
+    return true;
 }
-void GCPRegister::loadGCPFile(std::string gcpFile)
+bool GCPRegister::loadGCPFile(std::string gcpFile)
 {
     // Graphical widget to configure the control point position
     if (m_doc._sfm_data.control_points.empty())
@@ -106,8 +110,22 @@ void GCPRegister::loadGCPFile(std::string gcpFile)
     else
     {
         std::cout << "Already control points are in the SfM file." << std::endl;
-        return;
     }
+    // A GCP whose image names match no view ends up with an empty obs map and
+    // registerProject rejects it later; report how many actually landed so a
+    // caller can tell "file read" from "file matched the reconstruction".
+    std::size_t usable = 0;
+    for (const auto &cp : m_doc._sfm_data.control_points)
+        if (cp.second.obs.size() >= 2) ++usable;
+    std::cout << "Control points with 2+ observations : " << usable
+              << " / " << m_doc._sfm_data.control_points.size() << std::endl;
+    if (usable < 3)
+    {
+        std::cerr << "At least 3 control points must be observed in 2+ views."
+                  << std::endl;
+        return false;
+    }
+    return true;
 }
 
 // Render the bitmask back to the command-line spelling. Echoing the caller's
@@ -131,7 +149,7 @@ static std::string IntrinsicOptToString(cameras::Intrinsic_Parameter_Type opt)
     return s.empty() ? "INVALID" : s;
 }
 
-void GCPRegister::registerProject(double weight,
+bool GCPRegister::registerProject(double weight,
                                   cameras::Intrinsic_Parameter_Type refine)
 {
     std::cout << "Bundle weight : " << weight << std::endl;
@@ -147,7 +165,7 @@ void GCPRegister::registerProject(double weight,
     if (m_doc._sfm_data.control_points.size() < 3)
     {
         std::cout << "At least 3 control points are required." << std::endl;
-        return;
+        return false;
     }
     // Assert that control points can be triangulated
     for (Landmarks::const_iterator iterL = m_doc._sfm_data.control_points.begin();
@@ -156,7 +174,7 @@ void GCPRegister::registerProject(double weight,
         if (iterL->second.obs.size() < 2)
         {
             std::cout << "Each control point must be defined in at least 2 pictures." << std::endl;
-            return;
+            return false;
         }
     }
 
@@ -216,7 +234,7 @@ void GCPRegister::registerProject(double weight,
         if (!TriangulateNViewAlgebraic(bearing_matrix, poses, &Xhomogeneous))
         {
             std::cout << "Invalid triangulation" << std::endl;
-            return;
+            return false;
         }
         const Vec3 X = Xhomogeneous.hnormalized();
         Vec3 X_unnorm = avg_dist * X + centroid;
@@ -247,14 +265,14 @@ void GCPRegister::registerProject(double weight,
         else
         {
             std::cout << "Control Point cannot be triangulated (not in front of the cameras)" << std::endl;
-            return;
+            return false;
         }
     }
 
     if (map_control_points.size() < 3)
     {
         std::cout << "Insufficient number of triangulated control points." << std::endl;
-        return;
+        return false;
     }
 
     // compute the similarity
@@ -331,6 +349,7 @@ void GCPRegister::registerProject(double weight,
         else
         {
             std::cout << "Registration failed. Please check your Control Points coordinates." << std::endl;
+            return false;
         }
     }
 
@@ -352,7 +371,11 @@ void GCPRegister::registerProject(double weight,
                                               control_point_opt                     // Use GCP and weight more their observation residuals
                                               )))
         {
-            std::cout << "BA with GCP failed." << std::endl;
+            // Not fatal: the similarity above already registered the model, so
+            // the result stays georeferenced and the BA only refines it. Keep
+            // going so the second pass still reports the RMS the caller checks.
+            std::cerr << "BA with GCP failed; keeping the similarity-only result."
+                      << std::endl;
         }
         std::cout << "debug finish" << std::endl;
     }
@@ -414,7 +437,7 @@ void GCPRegister::registerProject(double weight,
         if (!TriangulateNViewAlgebraic(bearing_matrix, poses, &Xhomogeneous))
         {
             std::cout << "Invalid triangulation" << std::endl;
-            return;
+            return false;
         }
         const Vec3 X = Xhomogeneous.hnormalized();
         Vec3 X_unnorm = avg_dist * X + centroid;
@@ -445,14 +468,14 @@ void GCPRegister::registerProject(double weight,
         else
         {
             std::cout << "Control Point cannot be triangulated (not in front of the cameras)" << std::endl;
-            return;
+            return false;
         }
     }
 
     if (map_control_points.size() < 3)
     {
         std::cout << "Insufficient number of triangulated control points." << std::endl;
-        return;
+        return false;
     }
 
     // compute the similarity
@@ -545,6 +568,8 @@ void GCPRegister::registerProject(double weight,
         else
         {
             std::cout << "Registration failed. Please check your Control Points coordinates." << std::endl;
+            return false;
         }
     }
+    return true;
 }

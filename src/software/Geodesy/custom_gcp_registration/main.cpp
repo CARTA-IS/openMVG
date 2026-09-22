@@ -70,24 +70,41 @@ int main(int argc, char **argv)
         }
     }
 
+    // None of the steps below used to reach the exit code: main saved
+    // unconditionally and returned 0, so a run that registered nothing wrote
+    // the untouched sfm_data to the output path and looked like a success.
+    // Bail out instead, leaving the output absent rather than present and wrong.
+    // Deliberately left on the heap and never deleted, as before: the process
+    // exits right after, and running ~GCPRegister here would be a teardown path
+    // this program has never taken.
     GCPRegister *gcpRegister = new GCPRegister();
-    gcpRegister->openProject(std::string(argv[2]) + "/" + std::string(argv[3]));
-    gcpRegister->loadGCPFile(std::string(argv[1]));
-    //gcpRegister->saveProject(path + "test.json");
+    if (!gcpRegister->openProject(std::string(argv[2]) + "/" + std::string(argv[3])))
+        return EXIT_FAILURE;
+    if (!gcpRegister->loadGCPFile(std::string(argv[1])))
+        return EXIT_FAILURE;
+
     // The weight branch used to test argc < 5 while reading argv[5]; that reads
     // out of range when called with exactly 5 arguments.
-    if (argc < 6)
-    {
-        gcpRegister->registerProject();
-    }
     //For disabling, use negative value.
-    else
-    {
-        gcpRegister->registerProject(weight, intrinsic_refinement_options);
-    }
+    const bool registered = (argc < 6)
+        ? gcpRegister->registerProject()
+        : gcpRegister->registerProject(weight, intrinsic_refinement_options);
+
+    // Write the statistics either way -- a failed registration is exactly when
+    // the log is worth reading.
     std::ofstream fs(std::string(argv[2]) + "/../" + "GCP_RMS.txt");
     std::cout << "test :" << gcpRegister->log << std::endl;
     fs << gcpRegister->log;
     fs.close();
-    gcpRegister->saveProject(std::string(argv[2]) + "/" + std::string(argv[4]));
+
+    if (!registered)
+    {
+        std::cerr << "GCP registration failed; leaving "
+                  << std::string(argv[2]) + "/" + std::string(argv[4])
+                  << " unwritten." << std::endl;
+        return EXIT_FAILURE;
+    }
+    if (!gcpRegister->saveProject(std::string(argv[2]) + "/" + std::string(argv[4])))
+        return EXIT_FAILURE;
+    return EXIT_SUCCESS;
 }

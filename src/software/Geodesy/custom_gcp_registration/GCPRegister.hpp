@@ -24,16 +24,18 @@ public:
     GCPRegister();
     ~GCPRegister();
     std::string log;
-    void saveProject(std::string savePath);
-    void openProject(std::string projectPath);
-    void loadGCPFile(std::string gcpFile);
+    // Every step reports failure. main() turns that into a non-zero exit so a
+    // caller cannot mistake an unregistered model for a registered one.
+    bool saveProject(std::string savePath);
+    bool openProject(std::string projectPath);
+    bool loadGCPFile(std::string gcpFile);
     // refine: which intrinsics the GCP-weighted bundle adjustment may move.
     // Parse the command-line string with
     // cameras::StringTo_Intrinsic_Parameter_Type so that the '|' combinations
     // main_GlobalSfM accepts work here too; it is the caller's job to reject a
     // parse failure (the helper returns Intrinsic_Parameter_Type(0)).
     // Defaults to ADJUST_ALL so the previous behaviour is unchanged.
-    void registerProject(
+    bool registerProject(
         double weight = 20.0,
         openMVG::cameras::Intrinsic_Parameter_Type refine =
             openMVG::cameras::Intrinsic_Parameter_Type::ADJUST_ALL);
