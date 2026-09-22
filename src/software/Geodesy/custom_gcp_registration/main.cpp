@@ -95,20 +95,24 @@ int main(int argc, char **argv)
         ? gcpRegister->registerProject()
         : gcpRegister->registerProject(weight, intrinsic_refinement_options);
 
-    // Write the statistics either way -- a failed registration is exactly when
-    // the log is worth reading.
+    // Leave both outputs alone on failure, for the same reason out.bin is left
+    // alone: GCPRegister only fills `log` in the success path, so writing it
+    // here would replace the previous run's report with an empty file while
+    // out.bin still held that run's result -- a mismatched pair on disk. The
+    // failure itself is on stderr and in whatever log the caller tees.
+    if (!registered)
+    {
+        std::cerr << "GCP registration failed; leaving "
+                  << std::string(argv[2]) + "/" + std::string(argv[4])
+                  << " and GCP_RMS.txt untouched." << std::endl;
+        return EXIT_FAILURE;
+    }
+
     std::ofstream fs(std::string(argv[2]) + "/../" + "GCP_RMS.txt");
     std::cout << "test :" << gcpRegister->log << std::endl;
     fs << gcpRegister->log;
     fs.close();
 
-    if (!registered)
-    {
-        std::cerr << "GCP registration failed; leaving "
-                  << std::string(argv[2]) + "/" + std::string(argv[4])
-                  << " unwritten." << std::endl;
-        return EXIT_FAILURE;
-    }
     if (!gcpRegister->saveProject(std::string(argv[2]) + "/" + std::string(argv[4])))
         return EXIT_FAILURE;
     return EXIT_SUCCESS;
