@@ -110,44 +110,40 @@ void GCPRegister::loadGCPFile(std::string gcpFile)
     }
 }
 
-void GCPRegister::registerProject(double weight, const std::string &refine)
+// Render the bitmask back to the command-line spelling. Echoing the caller's
+// string instead would misreport a value the parser normalised (e.g.
+// "ADJUST_FOCAL_LENGTH|ADJUST_PRINCIPAL_POINT|ADJUST_DISTORTION" == ADJUST_ALL).
+static std::string IntrinsicOptToString(cameras::Intrinsic_Parameter_Type opt)
+{
+    if (opt == cameras::Intrinsic_Parameter_Type::NONE)
+        return "NONE";
+    if (opt == cameras::Intrinsic_Parameter_Type::ADJUST_ALL)
+        return "ADJUST_ALL";
+    std::string s;
+    const auto add = [&s](const char *name) {
+        if (!s.empty()) s += "|";
+        s += name;
+    };
+    using T = cameras::Intrinsic_Parameter_Type;
+    if (static_cast<int>(opt & T::ADJUST_FOCAL_LENGTH))    add("ADJUST_FOCAL_LENGTH");
+    if (static_cast<int>(opt & T::ADJUST_PRINCIPAL_POINT)) add("ADJUST_PRINCIPAL_POINT");
+    if (static_cast<int>(opt & T::ADJUST_DISTORTION))      add("ADJUST_DISTORTION");
+    return s.empty() ? "INVALID" : s;
+}
+
+void GCPRegister::registerProject(double weight,
+                                  cameras::Intrinsic_Parameter_Type refine)
 {
     std::cout << "Bundle weight : " << weight << std::endl;
 
     // The GCP-weighted BA below used to hard-code ADJUST_ALL, which silently
     // re-opens the focal length that the SfM stage was told to keep fixed via
-    // --refine_intrinsics. Selectable here; ADJUST_ALL stays the default.
-    cameras::Intrinsic_Parameter_Type intrinsic_opt =
-        cameras::Intrinsic_Parameter_Type::ADJUST_ALL;
-    std::string effective = "ADJUST_ALL";
-    if (refine == "NONE")
-    {
-        intrinsic_opt = cameras::Intrinsic_Parameter_Type::NONE;
-        effective = refine;
-    }
-    else if (refine == "ADJUST_FOCAL_LENGTH")
-    {
-        intrinsic_opt = cameras::Intrinsic_Parameter_Type::ADJUST_FOCAL_LENGTH;
-        effective = refine;
-    }
-    else if (refine == "ADJUST_PRINCIPAL_POINT")
-    {
-        intrinsic_opt = cameras::Intrinsic_Parameter_Type::ADJUST_PRINCIPAL_POINT;
-        effective = refine;
-    }
-    else if (refine == "ADJUST_DISTORTION")
-    {
-        intrinsic_opt = cameras::Intrinsic_Parameter_Type::ADJUST_DISTORTION;
-        effective = refine;
-    }
-    else if (refine != "ADJUST_ALL")
-    {
-        std::cout << "Unknown intrinsic refine mode '" << refine
-                  << "', falling back to ADJUST_ALL." << std::endl;
-    }
-    // 적용되는 모드를 찍는다. 넘어온 문자열을 그대로 찍으면 오타일 때
-    // ADJUST_ALL 로 도는데 로그에는 오타가 남아 원인 추적이 어긋난다.
-    std::cout << "Intrinsic refine mode : " << effective << std::endl;
+    // --refine_intrinsics. Selectable now; ADJUST_ALL stays the default.
+    // Parsing lives in main.cpp so an invalid value fails the process the way
+    // main_GlobalSfM does, instead of silently running as ADJUST_ALL.
+    const cameras::Intrinsic_Parameter_Type intrinsic_opt = refine;
+    std::cout << "Intrinsic refine mode : "
+              << IntrinsicOptToString(intrinsic_opt) << std::endl;
     if (m_doc._sfm_data.control_points.size() < 3)
     {
         std::cout << "At least 3 control points are required." << std::endl;
