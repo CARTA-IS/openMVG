@@ -358,7 +358,14 @@ bool GCPRegister::registerProject(double weight,
     //---
     {
         std::cout << "debug begin" << std::endl;
+        // Zero disables the GCP term just as a negative value does. Say so:
+        // a caller that meant to weight the control points and mistyped the
+        // number would otherwise see a clean run that never used them.
         bool useBundle = (weight > 0);
+        if (!useBundle)
+            std::cout << "GCP weight " << weight << " <= 0: the bundle adjustment"
+                         " runs without the control point term; the similarity"
+                         " transform is the only registration." << std::endl;
         using namespace openMVG::sfm;
         Bundle_Adjustment_Ceres::BA_Ceres_options options;
         Bundle_Adjustment_Ceres bundle_adjustment_obj(options);

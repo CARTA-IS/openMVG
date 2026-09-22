@@ -17,7 +17,10 @@ int main(int argc, char **argv)
                   << " <gcp_list.txt> <reconstruction_dir> <input.bin>"
                      " <output.bin> [weight] [refine]\n"
                      "  weight  GCP weight for the registration BA. Default 20."
-                     " A negative value disables the BA.\n"
+                     " Zero or negative drops the\n"
+                     "          GCP term (useBundle = weight > 0), leaving the"
+                     " similarity transform as the\n"
+                     "          only registration.\n"
                      "  refine  Which intrinsics the BA may move, same grammar"
                      " as main_GlobalSfM -f. Default ADJUST_ALL.\n"
                      "          NONE | ADJUST_FOCAL_LENGTH |"
@@ -28,10 +31,12 @@ int main(int argc, char **argv)
     }
 
     // atof reports a malformed number as 0.0 without setting errno, and
-    // GCPRegister turns weight <= 0 into "skip the bundle adjustment"
+    // GCPRegister turns weight <= 0 into "skip the GCP term"
     // (useBundle = weight > 0). A typo would therefore disable the GCP-weighted
-    // BA as quietly as the documented negative value does. stod separates the
-    // two: a bad number fails the process, a negative one still disables.
+    // BA as quietly as passing 0 or a negative value deliberately does. stod
+    // separates the two: a bad number fails the process, 0 and negatives are
+    // kept as the documented way to ask for similarity-only registration, and
+    // registerProject says so on stdout when it takes that path.
     double weight = 20.0;
     if (argc >= 6)
     {
@@ -45,8 +50,8 @@ int main(int argc, char **argv)
         catch (const std::exception &)
         {
             std::cerr << "Invalid input for the GCP registration weight: '"
-                      << argv[5] << "'. Pass a number; a negative value"
-                         " disables the bundle adjustment." << std::endl;
+                      << argv[5] << "'. Pass a number; zero or negative drops"
+                         " the GCP term." << std::endl;
             return EXIT_FAILURE;
         }
     }
