@@ -117,12 +117,25 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-    std::ofstream fs(std::string(argv[2]) + "/../" + "GCP_RMS.txt");
+    // Save the model before writing the report that describes it. The other
+    // order leaves GCP_RMS.txt holding this run's numbers while out.bin still
+    // holds the previous run's model whenever the save fails -- exactly the
+    // mismatched pair the failure path above goes out of its way to avoid.
+    if (!gcpRegister->saveProject(std::string(argv[2]) + "/" + std::string(argv[4])))
+        return EXIT_FAILURE;
+
+    const std::string rms_path = std::string(argv[2]) + "/../" + "GCP_RMS.txt";
+    std::ofstream fs(rms_path);
     std::cout << "test :" << gcpRegister->log << std::endl;
     fs << gcpRegister->log;
     fs.close();
-
-    if (!gcpRegister->saveProject(std::string(argv[2]) + "/" + std::string(argv[4])))
+    // A full disk or a read-only directory would otherwise leave the previous
+    // run's RMS -- or a truncated file -- sitting next to a model that really
+    // was registered, and the exit code would still say everything went fine.
+    if (!fs)
+    {
+        std::cerr << "Cannot write the GCP RMS report." << rms_path << std::endl;
         return EXIT_FAILURE;
+    }
     return EXIT_SUCCESS;
 }
