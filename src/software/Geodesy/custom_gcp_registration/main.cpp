@@ -2,6 +2,7 @@
 
 #include "openMVG/cameras/Cameras_Common_command_line_helper.hpp"
 
+#include <cmath>
 #include <cstdlib>
 #include <stdexcept>
 
@@ -46,12 +47,20 @@ int main(int argc, char **argv)
             weight = std::stod(argv[5], &consumed);
             if (consumed != std::string(argv[5]).size())
                 throw std::invalid_argument("trailing characters");
+            // stod also accepts "nan" and "inf" as well-formed numbers. NaN
+            // then loses the `weight > 0` test in registerProject, so it would
+            // drop the GCP term exactly as quietly as atof's 0.0 did -- the
+            // failure this parse was tightened to catch. Infinity is no better:
+            // it makes every control point residual non-finite and the BA
+            // diverges. Neither is a weight, so reject both here.
+            if (!std::isfinite(weight))
+                throw std::invalid_argument("not a finite number");
         }
         catch (const std::exception &)
         {
             std::cerr << "Invalid input for the GCP registration weight: '"
-                      << argv[5] << "'. Pass a number; zero or negative drops"
-                         " the GCP term." << std::endl;
+                      << argv[5] << "'. Pass a finite number; zero or"
+                         " negative drops the GCP term." << std::endl;
             return EXIT_FAILURE;
         }
     }
