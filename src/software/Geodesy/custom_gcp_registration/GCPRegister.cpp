@@ -24,21 +24,25 @@ std::string GCPRegister::GetProjection()
 {
     return prj;
 }
-void GCPRegister::saveProject(std::string dstPath)
+bool GCPRegister::saveProject(std::string dstPath)
 {
     if (!m_doc.saveData(dstPath))
     {
-        std::cout << "Cannot save the sfm_data file." << dstPath << std::endl;
+        std::cerr << "Cannot save the sfm_data file." << dstPath << std::endl;
+        return false;
     }
+    return true;
 }
-void GCPRegister::openProject(std::string projectPath)
+bool GCPRegister::openProject(std::string projectPath)
 {
     if (!m_doc.loadData(projectPath))
     {
-        std::cout << "Cannot open the sfm_data file." << projectPath << std::endl;
+        std::cerr << "Cannot open the sfm_data file." << projectPath << std::endl;
+        return false;
     }
+    return true;
 }
-void GCPRegister::loadGCPFile(std::string gcpFile)
+bool GCPRegister::loadGCPFile(std::string gcpFile)
 {
     // Graphical widget to configure the control point position
     if (m_doc._sfm_data.control_points.empty())
@@ -106,17 +110,62 @@ void GCPRegister::loadGCPFile(std::string gcpFile)
     else
     {
         std::cout << "Already control points are in the SfM file." << std::endl;
-        return;
     }
+    // A GCP whose image names match no view ends up with an empty obs map and
+    // registerProject rejects it later; report how many actually landed so a
+    // caller can tell "file read" from "file matched the reconstruction".
+    std::size_t usable = 0;
+    for (const auto &cp : m_doc._sfm_data.control_points)
+        if (cp.second.obs.size() >= 2) ++usable;
+    std::cout << "Control points with 2+ observations : " << usable
+              << " / " << m_doc._sfm_data.control_points.size() << std::endl;
+    if (usable < 3)
+    {
+        std::cerr << "At least 3 control points must be observed in 2+ views."
+                  << std::endl;
+        return false;
+    }
+    return true;
 }
 
-void GCPRegister::registerProject(double weight)
+// Render the bitmask back to the command-line spelling. Echoing the caller's
+// string instead would misreport a value the parser normalised (e.g.
+// "ADJUST_FOCAL_LENGTH|ADJUST_PRINCIPAL_POINT|ADJUST_DISTORTION" == ADJUST_ALL).
+static std::string IntrinsicOptToString(cameras::Intrinsic_Parameter_Type opt)
+{
+    if (opt == cameras::Intrinsic_Parameter_Type::NONE)
+        return "NONE";
+    if (opt == cameras::Intrinsic_Parameter_Type::ADJUST_ALL)
+        return "ADJUST_ALL";
+    std::string s;
+    const auto add = [&s](const char *name) {
+        if (!s.empty()) s += "|";
+        s += name;
+    };
+    using T = cameras::Intrinsic_Parameter_Type;
+    if (static_cast<int>(opt & T::ADJUST_FOCAL_LENGTH))    add("ADJUST_FOCAL_LENGTH");
+    if (static_cast<int>(opt & T::ADJUST_PRINCIPAL_POINT)) add("ADJUST_PRINCIPAL_POINT");
+    if (static_cast<int>(opt & T::ADJUST_DISTORTION))      add("ADJUST_DISTORTION");
+    return s.empty() ? "INVALID" : s;
+}
+
+bool GCPRegister::registerProject(double weight,
+                                  cameras::Intrinsic_Parameter_Type refine)
 {
     std::cout << "Bundle weight : " << weight << std::endl;
+
+    // The GCP-weighted BA below used to hard-code ADJUST_ALL, which silently
+    // re-opens the focal length that the SfM stage was told to keep fixed via
+    // --refine_intrinsics. Selectable now; ADJUST_ALL stays the default.
+    // Parsing lives in main.cpp so an invalid value fails the process the way
+    // main_GlobalSfM does, instead of silently running as ADJUST_ALL.
+    const cameras::Intrinsic_Parameter_Type intrinsic_opt = refine;
+    std::cout << "Intrinsic refine mode : "
+              << IntrinsicOptToString(intrinsic_opt) << std::endl;
     if (m_doc._sfm_data.control_points.size() < 3)
     {
         std::cout << "At least 3 control points are required." << std::endl;
-        return;
+        return false;
     }
     // Assert that control points can be triangulated
     for (Landmarks::const_iterator iterL = m_doc._sfm_data.control_points.begin();
@@ -125,7 +174,7 @@ void GCPRegister::registerProject(double weight)
         if (iterL->second.obs.size() < 2)
         {
             std::cout << "Each control point must be defined in at least 2 pictures." << std::endl;
-            return;
+            return false;
         }
     }
 
@@ -185,7 +234,7 @@ void GCPRegister::registerProject(double weight)
         if (!TriangulateNViewAlgebraic(bearing_matrix, poses, &Xhomogeneous))
         {
             std::cout << "Invalid triangulation" << std::endl;
-            return;
+            return false;
         }
         const Vec3 X = Xhomogeneous.hnormalized();
         Vec3 X_unnorm = avg_dist * X + centroid;
@@ -216,14 +265,14 @@ void GCPRegister::registerProject(double weight)
         else
         {
             std::cout << "Control Point cannot be triangulated (not in front of the cameras)" << std::endl;
-            return;
+            return false;
         }
     }
 
     if (map_control_points.size() < 3)
     {
         std::cout << "Insufficient number of triangulated control points." << std::endl;
-        return;
+        return false;
     }
 
     // compute the similarity
@@ -300,6 +349,7 @@ void GCPRegister::registerProject(double weight)
         else
         {
             std::cout << "Registration failed. Please check your Control Points coordinates." << std::endl;
+            return false;
         }
     }
 
@@ -308,23 +358,38 @@ void GCPRegister::registerProject(double weight)
     //---
     {
         std::cout << "debug begin" << std::endl;
+        // Zero disables the GCP term just as a negative value does. Say so:
+        // a caller that meant to weight the control points and mistyped the
+        // number would otherwise see a clean run that never used them.
         bool useBundle = (weight > 0);
+        if (!useBundle)
+            std::cout << "GCP weight " << weight << " <= 0: the bundle adjustment"
+                         " runs without the control point term; the similarity"
+                         " transform is the only registration." << std::endl;
         using namespace openMVG::sfm;
         Bundle_Adjustment_Ceres::BA_Ceres_options options;
         Bundle_Adjustment_Ceres bundle_adjustment_obj(options);
         Control_Point_Parameter control_point_opt(weight, useBundle);
         if (!bundle_adjustment_obj.Adjust(m_doc._sfm_data,
                                           Optimize_Options(
-                                              cameras::Intrinsic_Parameter_Type::ADJUST_ALL, // Keep intrinsic constant
-                                              Extrinsic_Parameter_Type::ADJUST_ALL,          // Adjust camera motion
-                                              Structure_Parameter_Type::ADJUST_ALL,          // Adjust structure
-                                              control_point_opt                              // Use GCP and weight more their observation residuals
+                                              intrinsic_opt,                        // Selectable; see registerProject()
+                                              Extrinsic_Parameter_Type::ADJUST_ALL, // Adjust camera motion
+                                              Structure_Parameter_Type::ADJUST_ALL, // Adjust structure
+                                              control_point_opt                     // Use GCP and weight more their observation residuals
                                               )))
         {
-            std::cout << "BA with GCP failed." << std::endl;
+            // Not fatal: the similarity above already registered the model, so
+            // the result stays georeferenced and the BA only refines it. Keep
+            // going so the second pass still reports the RMS the caller checks.
+            std::cerr << "BA with GCP failed; keeping the similarity-only result."
+                      << std::endl;
         }
         std::cout << "debug finish" << std::endl;
     }
+    // Everything below only measures the result for GCP_RMS.txt. The model
+    // is already registered by the similarity and BA above, so a failure
+    // from here on must not discard it: rmsReportUnavailable() notes why in
+    // the report and lets main() save out.bin as it always has.
     //---
     // isotropic normalization:
     // - compute the centroid of the cameras
@@ -383,7 +448,7 @@ void GCPRegister::registerProject(double weight)
         if (!TriangulateNViewAlgebraic(bearing_matrix, poses, &Xhomogeneous))
         {
             std::cout << "Invalid triangulation" << std::endl;
-            return;
+            return rmsReportUnavailable("Invalid triangulation");
         }
         const Vec3 X = Xhomogeneous.hnormalized();
         Vec3 X_unnorm = avg_dist * X + centroid;
@@ -414,14 +479,14 @@ void GCPRegister::registerProject(double weight)
         else
         {
             std::cout << "Control Point cannot be triangulated (not in front of the cameras)" << std::endl;
-            return;
+            return rmsReportUnavailable("a control point is not in front of the cameras");
         }
     }
 
     if (map_control_points.size() < 3)
     {
         std::cout << "Insufficient number of triangulated control points." << std::endl;
-        return;
+        return rmsReportUnavailable("fewer than 3 control points triangulated");
     }
 
     // compute the similarity
@@ -514,6 +579,19 @@ void GCPRegister::registerProject(double weight)
         else
         {
             std::cout << "Registration failed. Please check your Control Points coordinates." << std::endl;
+            return rmsReportUnavailable("FindRTS found no similarity");
         }
     }
+    return true;
+}
+
+bool GCPRegister::rmsReportUnavailable(const std::string &reason)
+{
+    std::cerr << "GCP RMS report unavailable (" << reason
+              << "); the model is registered and will still be saved." << std::endl;
+    // Written to GCP_RMS.txt in place of the numbers, so the report next to
+    // out.bin describes this run rather than being empty or left over from the
+    // previous one.
+    log = "RMS Error unavailable: " + reason + "\n";
+    return true;
 }

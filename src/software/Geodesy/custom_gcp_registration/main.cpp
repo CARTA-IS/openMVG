@@ -1,23 +1,141 @@
 #include "GCPRegister.hpp"
 
+#include "openMVG/cameras/Cameras_Common_command_line_helper.hpp"
+
+#include <cmath>
+#include <cstdlib>
+#include <stdexcept>
+
 int main(int argc, char **argv)
 {
-    GCPRegister *gcpRegister = new GCPRegister();
-    gcpRegister->openProject(std::string(argv[2]) + "/" + std::string(argv[3]));
-    gcpRegister->loadGCPFile(std::string(argv[1]));
-    //gcpRegister->saveProject(path + "test.json");
+    // argv: 1=gcp_list 2=recon_dir 3=in.bin 4=out.bin [5=weight] [6=refine]
+    //
+    // argv[1..4] were read unconditionally, so calling this with fewer than
+    // four arguments dereferenced past the end of argv.
     if (argc < 5)
     {
-        gcpRegister->registerProject();
+        std::cerr << "Usage: " << argv[0]
+                  << " <gcp_list.txt> <reconstruction_dir> <input.bin>"
+                     " <output.bin> [weight] [refine]\n"
+                     "  weight  GCP weight for the registration BA. Default 20."
+                     " Zero or negative drops the\n"
+                     "          GCP term (useBundle = weight > 0), leaving the"
+                     " similarity transform as the\n"
+                     "          only registration.\n"
+                     "  refine  Which intrinsics the BA may move, same grammar"
+                     " as main_GlobalSfM -f. Default ADJUST_ALL.\n"
+                     "          NONE | ADJUST_FOCAL_LENGTH |"
+                     " ADJUST_PRINCIPAL_POINT | ADJUST_DISTORTION |"
+                     " ADJUST_ALL, combinable with '|'."
+                  << std::endl;
+        return EXIT_FAILURE;
     }
-    //For disabling, use negative value.
-    else
+
+    // atof reports a malformed number as 0.0 without setting errno, and
+    // GCPRegister turns weight <= 0 into "skip the GCP term"
+    // (useBundle = weight > 0). A typo would therefore disable the GCP-weighted
+    // BA as quietly as passing 0 or a negative value deliberately does. stod
+    // separates the two: a bad number fails the process, 0 and negatives are
+    // kept as the documented way to ask for similarity-only registration, and
+    // registerProject says so on stdout when it takes that path.
+    double weight = 20.0;
+    if (argc >= 6)
     {
-        gcpRegister->registerProject(atof(argv[5]));
+        try
+        {
+            std::size_t consumed = 0;
+            weight = std::stod(argv[5], &consumed);
+            if (consumed != std::string(argv[5]).size())
+                throw std::invalid_argument("trailing characters");
+            // stod also accepts "nan" and "inf" as well-formed numbers. NaN
+            // then loses the `weight > 0` test in registerProject, so it would
+            // drop the GCP term exactly as quietly as atof's 0.0 did -- the
+            // failure this parse was tightened to catch. Infinity is no better:
+            // it makes every control point residual non-finite and the BA
+            // diverges. Neither is a weight, so reject both here.
+            if (!std::isfinite(weight))
+                throw std::invalid_argument("not a finite number");
+        }
+        catch (const std::exception &)
+        {
+            std::cerr << "Invalid input for the GCP registration weight: '"
+                      << argv[5] << "'. Pass a finite number; zero or"
+                         " negative drops the GCP term." << std::endl;
+            return EXIT_FAILURE;
+        }
     }
-    std::ofstream fs(std::string(argv[2]) + "/../" + "GCP_RMS.txt");
+
+    // refine uses the same grammar as main_GlobalSfM's -f/--refineIntrinsics,
+    // so '|' combinations work. Parse and validate before touching the project:
+    // the helper returns Intrinsic_Parameter_Type(0) on an unknown key, and a
+    // caller that narrowed the intrinsics must not silently get ADJUST_ALL.
+    auto intrinsic_refinement_options =
+        openMVG::cameras::Intrinsic_Parameter_Type::ADJUST_ALL;
+    if (argc >= 7)
+    {
+        intrinsic_refinement_options =
+            openMVG::cameras::StringTo_Intrinsic_Parameter_Type(argv[6]);
+        if (intrinsic_refinement_options ==
+            static_cast<openMVG::cameras::Intrinsic_Parameter_Type>(0))
+        {
+            std::cerr << "Invalid input for Bundle Adjusment Intrinsic parameter "
+                         "refinement option" << std::endl;
+            return EXIT_FAILURE;
+        }
+    }
+
+    // None of the steps below used to reach the exit code: main saved
+    // unconditionally and returned 0, so a run that registered nothing wrote
+    // the untouched sfm_data to the output path and looked like a success.
+    // Bail out instead, leaving the output absent rather than present and wrong.
+    // Deliberately left on the heap and never deleted, as before: the process
+    // exits right after, and running ~GCPRegister here would be a teardown path
+    // this program has never taken.
+    GCPRegister *gcpRegister = new GCPRegister();
+    if (!gcpRegister->openProject(std::string(argv[2]) + "/" + std::string(argv[3])))
+        return EXIT_FAILURE;
+    if (!gcpRegister->loadGCPFile(std::string(argv[1])))
+        return EXIT_FAILURE;
+
+    // The weight branch used to test argc < 5 while reading argv[5]; that reads
+    // out of range when called with exactly 5 arguments.
+    //For disabling, use negative value.
+    const bool registered = (argc < 6)
+        ? gcpRegister->registerProject()
+        : gcpRegister->registerProject(weight, intrinsic_refinement_options);
+
+    // Leave both outputs alone on failure, for the same reason out.bin is left
+    // alone: GCPRegister only fills `log` in the success path, so writing it
+    // here would replace the previous run's report with an empty file while
+    // out.bin still held that run's result -- a mismatched pair on disk. The
+    // failure itself is on stderr and in whatever log the caller tees.
+    if (!registered)
+    {
+        std::cerr << "GCP registration failed; leaving "
+                  << std::string(argv[2]) + "/" + std::string(argv[4])
+                  << " and GCP_RMS.txt untouched." << std::endl;
+        return EXIT_FAILURE;
+    }
+
+    // Save the model before writing the report that describes it. The other
+    // order leaves GCP_RMS.txt holding this run's numbers while out.bin still
+    // holds the previous run's model whenever the save fails -- exactly the
+    // mismatched pair the failure path above goes out of its way to avoid.
+    if (!gcpRegister->saveProject(std::string(argv[2]) + "/" + std::string(argv[4])))
+        return EXIT_FAILURE;
+
+    const std::string rms_path = std::string(argv[2]) + "/../" + "GCP_RMS.txt";
+    std::ofstream fs(rms_path);
     std::cout << "test :" << gcpRegister->log << std::endl;
     fs << gcpRegister->log;
     fs.close();
-    gcpRegister->saveProject(std::string(argv[2]) + "/" + std::string(argv[4]));
+    // A full disk or a read-only directory would otherwise leave the previous
+    // run's RMS -- or a truncated file -- sitting next to a model that really
+    // was registered, and the exit code would still say everything went fine.
+    if (!fs)
+    {
+        std::cerr << "Cannot write the GCP RMS report." << rms_path << std::endl;
+        return EXIT_FAILURE;
+    }
+    return EXIT_SUCCESS;
 }
