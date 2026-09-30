@@ -386,6 +386,10 @@ bool GCPRegister::registerProject(double weight,
         }
         std::cout << "debug finish" << std::endl;
     }
+    // Everything below only measures the result for GCP_RMS.txt. The model
+    // is already registered by the similarity and BA above, so a failure
+    // from here on must not discard it: rmsReportUnavailable() notes why in
+    // the report and lets main() save out.bin as it always has.
     //---
     // isotropic normalization:
     // - compute the centroid of the cameras
@@ -444,7 +448,7 @@ bool GCPRegister::registerProject(double weight,
         if (!TriangulateNViewAlgebraic(bearing_matrix, poses, &Xhomogeneous))
         {
             std::cout << "Invalid triangulation" << std::endl;
-            return false;
+            return rmsReportUnavailable("Invalid triangulation");
         }
         const Vec3 X = Xhomogeneous.hnormalized();
         Vec3 X_unnorm = avg_dist * X + centroid;
@@ -475,14 +479,14 @@ bool GCPRegister::registerProject(double weight,
         else
         {
             std::cout << "Control Point cannot be triangulated (not in front of the cameras)" << std::endl;
-            return false;
+            return rmsReportUnavailable("a control point is not in front of the cameras");
         }
     }
 
     if (map_control_points.size() < 3)
     {
         std::cout << "Insufficient number of triangulated control points." << std::endl;
-        return false;
+        return rmsReportUnavailable("fewer than 3 control points triangulated");
     }
 
     // compute the similarity
@@ -575,8 +579,19 @@ bool GCPRegister::registerProject(double weight,
         else
         {
             std::cout << "Registration failed. Please check your Control Points coordinates." << std::endl;
-            return false;
+            return rmsReportUnavailable("FindRTS found no similarity");
         }
     }
+    return true;
+}
+
+bool GCPRegister::rmsReportUnavailable(const std::string &reason)
+{
+    std::cerr << "GCP RMS report unavailable (" << reason
+              << "); the model is registered and will still be saved." << std::endl;
+    // Written to GCP_RMS.txt in place of the numbers, so the report next to
+    // out.bin describes this run rather than being empty or left over from the
+    // previous one.
+    log = "RMS Error unavailable: " + reason + "\n";
     return true;
 }

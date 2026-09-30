@@ -19,6 +19,9 @@ private:
     GCPList gcpList;
     void SetProjection(std::string prjStr);
     std::string GetProjection();
+    // Second-pass (RMS report) failure: the model is already registered, so
+    // record why the numbers are missing and report success.
+    bool rmsReportUnavailable(const std::string &reason);
 
 public:
     GCPRegister();
